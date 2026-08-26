@@ -27,10 +27,12 @@
     var deferred = $.Deferred();
 
     if (mod.fileSystem) {
-      // An unpacked mod has no zip to mount, so it can reach /server_mods/<id>/
-      // but never the root the referee reads from.
-      ns.alarm("filesystem_mod", { identifier: mod.identifier });
-      deferred.resolve(false);
+      // An unpacked mod has no zip to mount, and does not need one: the game
+      // already exposes server_mods folders at the root.
+      ns.log("unpacked server mod, no zip mount needed", {
+        identifier: mod.identifier,
+      });
+      deferred.resolve(true);
       return deferred.promise();
     }
 
@@ -62,10 +64,14 @@
     return deferred.promise();
   }
 
+  /* spec:// rejects a query string, so jQuery's cache-busting parameter turns
+   * every spec probe into a 404. Only coui:// gets cache-busted.
+   */
   function probe(path) {
     var deferred = $.Deferred();
+    var bustable = path.indexOf("coui://") === 0;
 
-    $.ajax({ url: path, dataType: "text", cache: false })
+    $.ajax({ url: path, dataType: "text", cache: !bustable })
       .done(function () {
         deferred.resolve(true);
       })
@@ -81,9 +87,13 @@
     var checks = [probe("coui://server_mods/mods.json")];
 
     _.forEach(mods, function (mod) {
-      checks.push(
-        probe("coui://server_mods/" + mod.identifier + "/modinfo.json")
-      );
+      // An unpacked mod keeps the folder name it was installed under, which is
+      // not necessarily its identifier.
+      var root = mod.fileSystem
+        ? mod.installedPath
+        : "/server_mods/" + mod.identifier + "/";
+
+      checks.push(probe("coui:/" + root + "modinfo.json"));
     });
 
     // The referee's own input. If this cannot be read there is no point going on.

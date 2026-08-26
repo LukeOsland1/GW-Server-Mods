@@ -1,20 +1,26 @@
-/* gw_play: mount before the battle is launched from the galaxy map. */
+/* gw_play: mount before the battle is launched from the galaxy map.
+ *
+ * model.fight is the entry point a battle actually goes through, and the
+ * referee generates unit specs from spec://pa/units/... shortly after, so the
+ * mounts have to be in place by then. restartFight is the same trip taken
+ * again after a defeat.
+ */
 (function (root) {
   var ns = root.GwServerMods || (root.GwServerMods = {});
   var MARK = "__gwServerModsPatched";
 
-  function patchLaunchFight() {
-    if (!model || !_.isFunction(model.launchFight)) {
+  function patchFight(name) {
+    if (!model || !_.isFunction(model[name])) {
       return false;
     }
 
-    if (model.launchFight[MARK]) {
+    if (model[name][MARK]) {
       return true;
     }
 
-    var previous = model.launchFight;
+    var previous = model[name];
 
-    model.launchFight = function () {
+    model[name] = function () {
       var self = this;
       var args = arguments;
 
@@ -23,9 +29,9 @@
       });
     };
 
-    model.launchFight[MARK] = true;
+    model[name][MARK] = true;
 
-    ns.log("launchFight patched");
+    ns.log(name + " patched");
 
     return true;
   }
@@ -33,8 +39,14 @@
   try {
     ns.hooks.install();
 
-    if (!patchLaunchFight()) {
-      ns.alarm("launch_unavailable", { where: "model.launchFight" });
+    // Ready before the player can click, not only once they have.
+    ns.mount.run();
+
+    var fight = patchFight("fight");
+    var restart = patchFight("restartFight");
+
+    if (!fight || !restart) {
+      ns.alarm("launch_unavailable", { fight: fight, restartFight: restart });
     }
   } catch (e) {
     console.error("[GW-SM]", e);
