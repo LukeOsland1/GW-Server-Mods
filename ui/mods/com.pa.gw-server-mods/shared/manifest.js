@@ -55,6 +55,9 @@
 
     return {
       identifier: identifier,
+      // The gate normalises to lower case; anything handed back to the game
+      // keeps the case the mod was installed under.
+      rawIdentifier: (mod && mod.identifier) || identifier,
       displayName:
         _.isString(mod.display_name) && mod.display_name.length
           ? mod.display_name
@@ -87,10 +90,17 @@
     });
   }
 
+  function rawIdentifiers() {
+    return _.map(activeServerMods(), function (mod) {
+      return mod.rawIdentifier;
+    });
+  }
+
   ns.manifest = {
     available: available,
     activeServerMods: activeServerMods,
     identifiers: identifiers,
+    rawIdentifiers: rawIdentifiers,
     normalizeIdentifier: normalizeIdentifier,
     normalizeVersion: normalizeVersion,
   };

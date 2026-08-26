@@ -19,7 +19,8 @@
       return;
     }
 
-    var expected = ns.manifest.identifiers();
+    // Case as installed: this list goes back to the game, not to the gate.
+    var expected = ns.manifest.rawIdentifiers();
 
     if (!expected.length) {
       return;
