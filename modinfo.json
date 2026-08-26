@@ -1,0 +1,49 @@
+{
+  "context": "client",
+  "identifier": "com.pa.gw-server-mods",
+  "display_name": "GW Server Mods",
+  "description": "Mounts your active server mods for Galactic War battles, which the base game skips. In co-op the host is the source of truth: a viewer missing a server mod the host is running is told which one and why, before the battle starts.",
+  "author": "Quitch",
+  "version": "0.1.0",
+  "build": "124673",
+  "date": "2026-08-26",
+  "signature": " ",
+  "category": ["titans", "gw", "fix", "gameplay"],
+  "priority": 200,
+  "galacticWarMod": true,
+  "scenes": {
+    "connect_to_game": [
+      "coui://ui/mods/com.pa.gw-server-mods/shared/alarm.js",
+      "coui://ui/mods/com.pa.gw-server-mods/shared/manifest.js",
+      "coui://ui/mods/com.pa.gw-server-mods/shared/mount.js",
+      "coui://ui/mods/com.pa.gw-server-mods/shared/hooks.js",
+      "coui://ui/mods/com.pa.gw-server-mods/shared/capability.js",
+      "coui://ui/mods/com.pa.gw-server-mods/connect_to_game/start.js",
+      "coui://ui/mods/com.pa.gw-server-mods/connect_to_game/gate.js"
+    ],
+    "gw_lobby": [
+      "coui://ui/mods/com.pa.gw-server-mods/shared/alarm.js",
+      "coui://ui/mods/com.pa.gw-server-mods/shared/manifest.js",
+      "coui://ui/mods/com.pa.gw-server-mods/shared/mount.js",
+      "coui://ui/mods/com.pa.gw-server-mods/shared/hooks.js",
+      "coui://ui/mods/com.pa.gw-server-mods/shared/capability.js",
+      "coui://ui/mods/com.pa.gw-server-mods/gw_lobby/keepalive.js"
+    ],
+    "gw_play": [
+      "coui://ui/mods/com.pa.gw-server-mods/shared/alarm.js",
+      "coui://ui/mods/com.pa.gw-server-mods/shared/manifest.js",
+      "coui://ui/mods/com.pa.gw-server-mods/shared/mount.js",
+      "coui://ui/mods/com.pa.gw-server-mods/shared/hooks.js",
+      "coui://ui/mods/com.pa.gw-server-mods/shared/capability.js",
+      "coui://ui/mods/com.pa.gw-server-mods/gw_play/launch.js"
+    ],
+    "live_game": [
+      "coui://ui/mods/com.pa.gw-server-mods/shared/alarm.js",
+      "coui://ui/mods/com.pa.gw-server-mods/shared/manifest.js",
+      "coui://ui/mods/com.pa.gw-server-mods/shared/mount.js",
+      "coui://ui/mods/com.pa.gw-server-mods/shared/hooks.js",
+      "coui://ui/mods/com.pa.gw-server-mods/shared/capability.js",
+      "coui://ui/mods/com.pa.gw-server-mods/live_game/remount.js"
+    ]
+  }
+}
