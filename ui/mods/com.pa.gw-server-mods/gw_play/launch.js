@@ -44,6 +44,6 @@
       ns.alarm("launch_unavailable", { fight: fight, restartFight: restart });
     }
   } catch (e) {
-    console.error("[GW-SM]", e);
+    console.error("[GW-SM] " + ((e && (e.stack || e.message)) || e));
   }
 })(window);

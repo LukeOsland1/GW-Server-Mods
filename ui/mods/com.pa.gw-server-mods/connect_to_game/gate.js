@@ -204,7 +204,7 @@
       });
     }
   } catch (e) {
-    console.error("[GW-SM]", e);
+    console.error("[GW-SM] " + ((e && (e.stack || e.message)) || e));
   }
 
   ns.gate = {

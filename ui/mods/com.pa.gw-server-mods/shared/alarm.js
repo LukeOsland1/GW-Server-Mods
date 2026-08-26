@@ -73,22 +73,24 @@
   ns.alarm = function (code, detail) {
     var record = { code: code, detail: detail || {} };
     raised.push(record);
-    console.error(LOG, "ALARM", code, JSON.stringify(record.detail));
+    console.error(LOG + " ALARM " + code + " " + JSON.stringify(record.detail));
 
     try {
       show();
     } catch (e) {
-      console.error(LOG, "alarm banner failed", e);
+      console.error(LOG + " alarm banner failed " + (e && e.message));
     }
 
     return record;
   };
 
+  // PA's log file keeps only the first console argument, so build one string.
   ns.log = function (message, detail) {
-    if (_.isUndefined(detail)) {
-      console.log(LOG, message);
-    } else {
-      console.log(LOG, message, JSON.stringify(detail));
-    }
+    console.log(
+      LOG +
+        " " +
+        message +
+        (_.isUndefined(detail) ? "" : " " + JSON.stringify(detail))
+    );
   };
 })(window);
