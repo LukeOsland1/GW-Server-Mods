@@ -12,6 +12,7 @@
   "priority": 200,
   "galacticWarMod": true,
   "scenes": {
+    "icon_atlas": ["coui://ui/mods/com.pa.gw-server-mods/icon_atlas/icons.js"],
     "connect_to_game": [
       "coui://ui/mods/com.pa.gw-server-mods/shared/alarm.js",
       "coui://ui/mods/com.pa.gw-server-mods/shared/manifest.js",
