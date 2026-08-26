@@ -10,7 +10,10 @@
     mounted: false,
     at: 0,
     mods: [],
+    sequence: 0,
   };
+
+  var running = null;
 
   function zipMountAvailable() {
     return !!(api.file && api.file.zip && _.isFunction(api.file.zip.mount));
@@ -21,9 +24,6 @@
 
     if (mod.fileSystem) {
       // The game already exposes server_mods folders at the root.
-      ns.log("unpacked server mod, no zip mount needed", {
-        identifier: mod.identifier,
-      });
       deferred.resolve(true);
       return deferred.promise();
     }
@@ -118,7 +118,7 @@
 
   // Repeatable: Galactic War tears the mounts down more than once per battle.
   // remountContent is false only for a running battle, where it blanks the scene.
-  function run(options) {
+  function runOnce(options) {
     var withContent = !options || options.remountContent !== false;
     var deferred = $.Deferred();
 
@@ -156,11 +156,12 @@
               mounted: ok,
               at: Date.now(),
               mods: mods,
+              sequence: state.sequence + 1,
             };
 
             ns.log("mounted server mods", {
               ok: ok,
-              identifiers: ns.manifest.identifiers(),
+              count: mods.length,
             });
 
             deferred.resolve(ok);
@@ -172,8 +173,25 @@
     return deferred.promise();
   }
 
+  // A single unmount reaches here through two wrappers, and a full cycle costs
+  // seconds, so concurrent callers share one run.
+  function run(options) {
+    if (running) {
+      return running;
+    }
+
+    running = runOnce(options).always(function () {
+      running = null;
+    });
+
+    return running;
+  }
+
   ns.mount = {
     run: run,
+    sequence: function () {
+      return state.sequence;
+    },
     state: function () {
       return state;
     },

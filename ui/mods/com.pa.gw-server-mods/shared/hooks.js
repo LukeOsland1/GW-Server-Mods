@@ -14,9 +14,15 @@
     }
 
     var wrapped = function () {
+      var before = ns.mount.sequence();
       var result = previous.apply(this, arguments);
 
       return $.when(result).then(function () {
+        // The inner wrapper may already have remounted during that call.
+        if (ns.mount.sequence() !== before) {
+          return true;
+        }
+
         return ns.mount.run();
       });
     };
