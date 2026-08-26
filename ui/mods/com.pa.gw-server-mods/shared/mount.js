@@ -67,6 +67,10 @@
   /* spec:// rejects a query string, so jQuery's cache-busting parameter turns
    * every spec probe into a 404. Only coui:// gets cache-busted.
    */
+  /* Mounting makes files readable; it does not register models and textures
+   * with the renderer. Without this a unit resolves every spec and renders as
+   * nothing at all. Community Mods does the same after mounting client zips.
+   */
   function remountContent() {
     if (!api.content || !_.isFunction(api.content.remount)) {
       ns.alarm("content_remount_unavailable", {});
@@ -128,8 +132,13 @@
 
   /* Mount every active server mod. Safe to call repeatedly - Galactic War tears
    * mounts down more than once per battle, so this runs again each time.
+   *
+   * options.remountContent rebuilds the renderer's catalogue afterwards, which
+   * every caller wants except one: doing it during a running battle blanks the
+   * scene, and by then it is too late to help anyway.
    */
-  function run() {
+  function run(options) {
+    var withContent = !options || options.remountContent !== false;
     var deferred = $.Deferred();
 
     if (!ns.manifest.available()) {
@@ -157,11 +166,7 @@
 
     $.when.apply($, rootMounts).always(function () {
       $.when(CommunityModsManager.mountServerMods()).always(function () {
-        // Mounting makes the files readable; it does not rebuild the content
-        // catalogue the renderer loads models and textures from. Without this
-        // every spec resolves and every unit is invisible. Community Mods does
-        // the same after mounting client zips.
-        $.when(remountContent()).always(function () {
+        $.when(withContent ? remountContent() : null).always(function () {
           verify(mods).then(function (ok) {
             state = {
               mounted: ok,
