@@ -65,10 +65,18 @@
     return true;
   }
 
+  /* Community Mods is not loaded into every scene. Where it is absent there is
+   * no remount to survive, which is not a failure - only a manager that is
+   * present but missing the function is.
+   */
   function installRemountClientMods() {
     var mgr = root.CommunityModsManager;
 
-    if (!mgr || !_.isFunction(mgr.remountClientMods)) {
+    if (!mgr) {
+      return true;
+    }
+
+    if (!_.isFunction(mgr.remountClientMods)) {
       return false;
     }
 

@@ -112,18 +112,12 @@
   /* The host's published list arrives on request_client_mod_manifest, whose
    * stock handler takes no argument and drops it.
    */
-  function patchManifestRequest() {
-    if (!root.handlers || !_.isFunction(handlers.request_client_mod_manifest)) {
-      return false;
+  function captureHostRequired(previous) {
+    if (!_.isFunction(previous) || previous[MARK]) {
+      return previous;
     }
 
-    if (handlers.request_client_mod_manifest[MARK]) {
-      return true;
-    }
-
-    var previous = handlers.request_client_mod_manifest;
-
-    handlers.request_client_mod_manifest = function (payload) {
+    var wrapped = function (payload) {
       if (payload && _.isArray(payload.required_identifiers)) {
         hostRequired = _.map(
           payload.required_identifiers,
@@ -142,7 +136,32 @@
       return previous.apply(this, arguments);
     };
 
-    handlers.request_client_mod_manifest[MARK] = true;
+    wrapped[MARK] = true;
+
+    return wrapped;
+  }
+
+  /* The scene assigns this handler during its own setup, which can be after
+   * this script runs, so an accessor takes whatever lands rather than racing
+   * for it.
+   */
+  function patchManifestRequest() {
+    if (!root.handlers) {
+      return false;
+    }
+
+    var current = captureHostRequired(handlers.request_client_mod_manifest);
+
+    Object.defineProperty(handlers, "request_client_mod_manifest", {
+      configurable: true,
+      enumerable: true,
+      get: function () {
+        return current;
+      },
+      set: function (fn) {
+        current = captureHostRequired(fn);
+      },
+    });
 
     return true;
   }
