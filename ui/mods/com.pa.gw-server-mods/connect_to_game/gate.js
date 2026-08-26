@@ -166,18 +166,12 @@
     return true;
   }
 
-  function patchSendMessage() {
-    if (!model || !_.isFunction(model.send_message)) {
-      return false;
+  function augment(previous) {
+    if (!_.isFunction(previous) || previous[MARK]) {
+      return previous;
     }
 
-    if (model.send_message[MARK]) {
-      return true;
-    }
-
-    var previous = model.send_message;
-
-    model.send_message = function (message, payload, respond) {
+    var wrapped = function (message, payload, respond) {
       if (message === REQUIRED && _.isObject(payload)) {
         try {
           payload = addHostServerMods(payload);
@@ -195,7 +189,32 @@
       return previous.call(this, message, payload, respond);
     };
 
-    model.send_message[MARK] = true;
+    wrapped[MARK] = true;
+
+    return wrapped;
+  }
+
+  /* send_message does not exist yet: the scene creates it in
+   * app.registerWithCoherent, which runs after loadSceneMods. An accessor takes
+   * it when it arrives.
+   */
+  function patchSendMessage() {
+    if (!root.model) {
+      return false;
+    }
+
+    var current = augment(model.send_message);
+
+    Object.defineProperty(model, "send_message", {
+      configurable: true,
+      enumerable: true,
+      get: function () {
+        return current;
+      },
+      set: function (fn) {
+        current = augment(fn);
+      },
+    });
 
     return true;
   }
