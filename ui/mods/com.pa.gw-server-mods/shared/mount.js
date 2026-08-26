@@ -67,6 +67,15 @@
   /* spec:// rejects a query string, so jQuery's cache-busting parameter turns
    * every spec probe into a 404. Only coui:// gets cache-busted.
    */
+  function remountContent() {
+    if (!api.content || !_.isFunction(api.content.remount)) {
+      ns.alarm("content_remount_unavailable", {});
+      return $.Deferred().resolve().promise();
+    }
+
+    return api.content.remount();
+  }
+
   function probe(path) {
     var deferred = $.Deferred();
     var bustable = path.indexOf("coui://") === 0;
@@ -148,19 +157,25 @@
 
     $.when.apply($, rootMounts).always(function () {
       $.when(CommunityModsManager.mountServerMods()).always(function () {
-        verify(mods).then(function (ok) {
-          state = {
-            mounted: ok,
-            at: Date.now(),
-            mods: mods,
-          };
+        // Mounting makes the files readable; it does not rebuild the content
+        // catalogue the renderer loads models and textures from. Without this
+        // every spec resolves and every unit is invisible. Community Mods does
+        // the same after mounting client zips.
+        $.when(remountContent()).always(function () {
+          verify(mods).then(function (ok) {
+            state = {
+              mounted: ok,
+              at: Date.now(),
+              mods: mods,
+            };
 
-          ns.log("mounted server mods", {
-            ok: ok,
-            identifiers: ns.manifest.identifiers(),
+            ns.log("mounted server mods", {
+              ok: ok,
+              identifiers: ns.manifest.identifiers(),
+            });
+
+            deferred.resolve(ok);
           });
-
-          deferred.resolve(ok);
         });
       });
     });
