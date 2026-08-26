@@ -27,6 +27,22 @@ is the executable statement of that limit and its whitelist is exhaustive — no
 no. `ko`, `_` (lodash 3.9.3), `$` and `api` are globals, and every scene shares one JS scope,
 which is why each module is an IIFE that guards against being loaded twice.
 
+## Seams assigned after mod scripts run
+
+Three separate functions this mod wraps do not exist, or are replaced, at the moment a
+scene mod loads:
+
+| Seam                                   | When it is assigned                                                         |
+| -------------------------------------- | --------------------------------------------------------------------------- |
+| `api.file.unmountAllMemoryFiles`       | Replaced by Community Mods' `gw_referee` state script after the scene loads |
+| `handlers.request_client_mod_manifest` | Assigned by `connect_to_game` during its own setup                          |
+| `model.send_message`                   | Created in `app.registerWithCoherent`, which runs _after_ `loadSceneMods`   |
+
+Each is taken with an `Object.defineProperty` accessor that re-wraps whatever is
+assigned, rather than reading the value once. A repeating timer was tried for the first
+of them and is the wrong tool: it is a race, and it stops defending after a fixed number
+of tries. **Anything a scene sets up during its own boot should be taken this way.**
+
 ## Mounting
 
 Two mounts per server mod, both needed:
@@ -51,6 +67,59 @@ mounts partway through battle setup. Wrapping that function once is not enough: 
 Mods `gw_referee` state script reassigns it after the scene loads. `shared/hooks.js` installs
 an accessor so whatever is assigned gets re-wrapped, which is deterministic where a repeating
 timer is a race that also gives up after a fixed number of tries.
+
+### A faction's art is split across two mods
+
+Legion ships its **models** in the server mod and its **textures** in the paired client
+mod:
+
+| File                              | Server mod    | Client mod      |
+| --------------------------------- | ------------- | --------------- |
+| `l_raptor.papa` (model)           | 183,183 bytes | absent          |
+| `l_raptor_diffuse.papa` (texture) | absent        | 1,365,902 bytes |
+
+Mounting only the server zip therefore produces a correctly shaped commander rendered
+entirely in white. `pairedClientMods()` matches active client zip mods whose identifier
+shares a prefix with an active server mod's, after stripping a trailing `-server`. That
+is a naming convention rather than a guarantee, and it is the weakest link in this
+design.
+
+### The content catalogue
+
+Mounting makes files readable; it does not register models and textures with the
+renderer. `api.content.remount()` rebuilds that catalogue, and Community Mods does the
+same after mounting client zips. Without it every spec resolves and every unit is
+invisible.
+
+It must **not** run during a battle: it blanks the scene, and the models are already
+loaded by then, so `live_game` holds the mounts with `remountContent: false`. Zip mounts
+themselves survive a remount - that was checked directly, before and after.
+
+## Strategic icons
+
+The icon atlas is built once, at startup. `icon_atlas.js` holds a hardcoded list of 132
+names, mods extend it through the `icon_atlas` scene, and `sendIconList()` hands the
+result to the engine. Nothing rebuilds it: a name pushed later is accepted and ignored,
+which is why a modded unit shows the fallback dot and why re-sending the list during a
+battle changes nothing.
+
+Legion does ship `ui/mods/com.pa.legion-expansion/icon_atlas.js` naming its own icons.
+That file is delivered through the **server mods' UI list**, which only loads when server
+mods are mounted at UI-load time - so skirmish gets it and Galactic War never does.
+
+`icon_atlas/icons.js` sidesteps that by naming every icon on disk rather than only the
+ones the base game knows. It needs no mounting: a mod shipping strategic icons shadows
+them into `ui/main/atlas/icon_atlas/img/strategic_icons/`, and client mods are mounted
+before this scene runs. Listing is async and the scene sends its list as soon as the file
+returns, so `sendIconList` is wrapped rather than raced - the scene's own call triggers
+the enumeration and the list goes out once, complete.
+
+Two known limits. This duplicates Legion's own mechanism rather than restoring it; the
+better fix is to make Galactic War load `ui_mod_list_for_server.js`, which would also
+restore the Legion UI scripts (`live_game_build_bar`, `live_game_selection` and others)
+that are silently missing in Galactic War today. And the atlas grows from 132 to 274
+names with one faction loaded; PA's atlas texture limit is unknown, and an overflow would
+show up as _other_ icons breaking rather than the modded ones.
 
 ## The co-op guard
 
@@ -81,6 +150,23 @@ mods today, and this mod must not quietly soften it for server mods.
 `GwServerMods.hostHasServerMod(identifier)` answers what the host published, so a feature can
 offer only what the host supports — a viewer running Legion against a host that is not should
 not be offered Legion.
+
+## Identifier case
+
+The gate normalises identifiers to lower case on both sides, so that comparison is safe.
+`model.gameModIdentifiers` goes back to the game instead - reconnect info and the beacon -
+where a mod installed as `qQuellerAI-dev` must not become `qquellerai-dev`. `manifest.js`
+carries both forms for that reason.
+
+## Alarms
+
+Failures here otherwise surface much later as a missing unit or a battle that will not
+start, so they are raised on screen as well as in the console, in wording a player can
+act on. The banner is a bonus rather than the report: not every scene composites its root
+document, `live_game` in particular.
+
+`cmm_unavailable` and `gate_unavailable` matter most - a partly installed guard is worse
+than none, because it looks like enforcement.
 
 ## What this cannot fix
 

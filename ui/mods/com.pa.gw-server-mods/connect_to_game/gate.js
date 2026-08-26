@@ -1,15 +1,4 @@
-/* Server mods in the base game's co-op required-mod check.
- *
- * Galactic War co-op already validates client mods host-first: the host sends
- * set_required_client_mods, each viewer answers with client_mod_manifest, and
- * the server compares the two. That comparison is set and version matching on
- * opaque identifier strings - it does not care whether an identifier names a
- * client mod or a server mod - so server mods can join it, and a mismatch then
- * lands on the mod mismatch screen the game already has.
- *
- * The payloads are augmented at send_message rather than by reimplementing the
- * functions that build them, which keeps the base game's own logic intact.
- */
+// See design.md.
 (function (root) {
   var ns = root.GwServerMods || (root.GwServerMods = {});
   var MARK = "__gwServerModsPatched";
@@ -17,8 +6,7 @@
   var REQUIRED = "set_required_client_mods";
   var MANIFEST = "client_mod_manifest";
 
-  // What the host published, as this client last saw it. Empty until the server
-  // asks for a manifest, which it does once the host has published.
+  // Empty until the server asks for a manifest.
   var hostRequired = [];
 
   function addHostServerMods(payload) {
@@ -56,16 +44,8 @@
     return payload;
   }
 
-  /* What a viewer reports having.
-   *
-   * A server mod the host is not running is deliberately left out, so a viewer
-   * with extra server mods can still play - they are simply recorded as not
-   * sharing them, and features can offer only what the host supports.
-   *
-   * The exception is galacticWarMod, which keeps its stock meaning: a mod
-   * declaring it is always reported, so a host missing it blocks the viewer
-   * exactly as it would for a client mod. This must not quietly soften that.
-   */
+  // galacticWarMod keeps its stock meaning and is always reported; anything
+  // else the host is not running is left out. See design.md.
   function sharedWithHost(mod) {
     return mod.galacticWarMod || hostRequired.indexOf(mod.identifier) !== -1;
   }
@@ -109,9 +89,7 @@
     return payload;
   }
 
-  /* The host's published list arrives on request_client_mod_manifest, whose
-   * stock handler takes no argument and drops it.
-   */
+  // The stock handler takes no argument and drops this payload.
   function captureHostRequired(previous) {
     if (!_.isFunction(previous) || previous[MARK]) {
       return previous;
@@ -141,10 +119,7 @@
     return wrapped;
   }
 
-  /* The scene assigns this handler during its own setup, which can be after
-   * this script runs, so an accessor takes whatever lands rather than racing
-   * for it.
-   */
+  // The scene assigns this handler after mod scripts run.
   function patchManifestRequest() {
     if (!root.handlers) {
       return false;
@@ -194,10 +169,8 @@
     return wrapped;
   }
 
-  /* send_message does not exist yet: the scene creates it in
-   * app.registerWithCoherent, which runs after loadSceneMods. An accessor takes
-   * it when it arrives.
-   */
+  // The scene creates send_message in app.registerWithCoherent, which runs
+  // after loadSceneMods.
   function patchSendMessage() {
     if (!root.model) {
       return false;
@@ -224,8 +197,7 @@
     var request = patchManifestRequest();
 
     if (!send || !request) {
-      // Mounting still works; the co-op guard does not. Never let a partly
-      // installed guard read as enforcement.
+      // A partly installed guard must never read as enforcement.
       ns.alarm("gate_unavailable", {
         send_message: send,
         request_manifest: request,

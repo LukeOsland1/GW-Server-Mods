@@ -1,9 +1,4 @@
-/* Structured failure reporting shared by every GW Server Mods scene.
- *
- * Console output alone is no use to a player, and these failures are the kind
- * that otherwise surface much later as a missing unit or a battle that will not
- * start. Anything raised here therefore also shows on screen.
- */
+// See design.md.
 (function (root) {
   var LOG = "[GW-SM]";
   var ns = root.GwServerMods || (root.GwServerMods = {});
@@ -14,8 +9,6 @@
 
   var raised = [];
 
-  // Failures the player can do something about get plain wording; the rest are
-  // reported as-is so a log is still worth reading.
   var WORDING = {
     cmm_unavailable:
       "Community Mods is not available, so server mods cannot be mounted.",
@@ -36,9 +29,7 @@
     return identifier ? wording + " (" + identifier + ")" : wording;
   }
 
-  // Not every scene composites its root document - live_game in particular
-  // renders only certain panel views - so treat the banner as a bonus on top of
-  // the console output, never as the only report.
+  // Not every scene composites its root document, live_game in particular.
   function banner() {
     var existing = document.getElementById("gw-sm-alarm");
 

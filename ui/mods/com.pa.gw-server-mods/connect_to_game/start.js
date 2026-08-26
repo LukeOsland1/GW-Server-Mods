@@ -1,11 +1,4 @@
-/* Routing a Galactic War start through the server mod mount.
- *
- * Community Mods excludes Galactic War from its own startGame wrapper with a
- * mode check, and that branch writes model.gameModIdentifiers([]). Rather than
- * reimplementing the call underneath to dodge that write, this calls through
- * and sets the identifiers afterwards: gameModIdentifiers is read later, by
- * gameInfo at connect time, not during the start call itself.
- */
+// See design.md.
 (function (root) {
   var ns = root.GwServerMods || (root.GwServerMods = {});
   var MARK = "__gwServerModsPatched";
@@ -19,7 +12,7 @@
       return;
     }
 
-    // Case as installed: this list goes back to the game, not to the gate.
+    // This list goes back to the game, not to the gate, so case matters.
     var expected = ns.manifest.rawIdentifiers();
 
     if (!expected.length) {
@@ -36,9 +29,8 @@
     });
 
     if (lost.length) {
-      // Something wrote over the list after this did. The battle will start
-      // without the server mods declared, so say so rather than let it fail
-      // later as a missing unit spec.
+      // Something wrote over the list; the battle would start without its
+      // server mods declared.
       ns.alarm("identifiers_lost", { expected: expected, applied: applied });
     }
   }

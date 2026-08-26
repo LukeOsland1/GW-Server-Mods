@@ -1,10 +1,5 @@
-/* gw_play: mount before the battle is launched from the galaxy map.
- *
- * model.fight is the entry point a battle actually goes through, and the
- * referee generates unit specs from spec://pa/units/... shortly after, so the
- * mounts have to be in place by then. restartFight is the same trip taken
- * again after a defeat.
- */
+// The referee generates unit specs shortly after this, so the mounts have to be
+// in place. restartFight is the same trip after a defeat.
 (function (root) {
   var ns = root.GwServerMods || (root.GwServerMods = {});
   var MARK = "__gwServerModsPatched";

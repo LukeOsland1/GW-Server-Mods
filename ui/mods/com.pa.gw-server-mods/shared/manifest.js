@@ -1,9 +1,4 @@
-/* The active server mod set, normalised to match the base game's mod gate.
- *
- * Community Mods already computes this; the identifiers and versions are
- * normalised exactly as connect_to_game.js does so a value this mod publishes
- * can never disagree with one the base game compares it against.
- */
+// Identifiers and versions are normalised exactly as connect_to_game.js does.
 (function (root) {
   var ns = root.GwServerMods || (root.GwServerMods = {});
 
@@ -11,8 +6,8 @@
     return;
   }
 
-  // Community Mods' own generated aggregate. It is mounted with the rest but is
-  // derived from the others, so it is not something a player can be missing.
+  // Community Mods' generated aggregate, derived from the others, so it is not
+  // something a player can be missing.
   var GENERATED_SERVER_MOD = "community-mods-server";
 
   function normalizeIdentifier(identifier) {
@@ -55,8 +50,7 @@
 
     return {
       identifier: identifier,
-      // The gate normalises to lower case; anything handed back to the game
-      // keeps the case the mod was installed under.
+      // The gate lower-cases; the game needs the case it was installed under.
       rawIdentifier: (mod && mod.identifier) || identifier,
       displayName:
         _.isString(mod.display_name) && mod.display_name.length
@@ -69,8 +63,6 @@
     };
   }
 
-  // Every active server mod, generated aggregate excluded. Used both for
-  // mounting and for what the host publishes to the co-op gate.
   function activeServerMods() {
     if (!available()) {
       ns.alarm("cmm_unavailable", { where: "manifest.activeServerMods" });
@@ -84,10 +76,8 @@
     });
   }
 
-  /* Art for a faction's units is usually split: the server mod carries models,
-   * its paired client mod carries textures. The renderer needs both at the VFS
-   * root, so the pairing has to be resolvable from the identifier.
-   */
+  // A faction splits its art: models in the server mod, textures in the paired
+  // client mod. See design.md.
   function pairedClientMods() {
     if (!available() || !_.isFunction(manager().activeClientZipMods)) {
       return [];

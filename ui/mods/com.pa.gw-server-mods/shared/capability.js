@@ -1,13 +1,4 @@
-/* What the host is running, for features that have to offer less without it.
- *
- * The answer is the required-mod list the host published for this game: on the
- * host its own, on a viewer the copy the server sent. Asking it about a server
- * mod identifier is unambiguous even though the list also holds client mods,
- * which is why no attempt is made to tell the two apart.
- *
- * Held in sessionStorage so it survives the scene changes between the lobby and
- * the battle, with an in-memory copy for when storage is unavailable.
- */
+// See design.md.
 (function (root) {
   var ns = root.GwServerMods || (root.GwServerMods = {});
 
@@ -59,7 +50,7 @@
     try {
       sessionStorage.removeItem(KEY);
     } catch (e) {
-      // Nothing to do; the in-memory copy is already cleared.
+      // The in-memory copy is already cleared.
     }
   }
 

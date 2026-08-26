@@ -1,14 +1,4 @@
-/* Keeping server mods mounted across Galactic War's remount cycle.
- *
- * Community Mods' remountClientMods() calls unmountAllMemoryFiles, which drops
- * the root mounts. The referee then cannot read the mod's unit specs and the
- * server starts with no commanders.
- *
- * unmountAllMemoryFiles is not wrapped once and left alone: the Community Mods
- * gw_referee state script reassigns it after the scene loads. An accessor
- * re-wraps whatever is assigned, which is deterministic where a repeating timer
- * is a race that also gives up.
- */
+// See design.md.
 (function (root) {
   var ns = root.GwServerMods || (root.GwServerMods = {});
 
@@ -65,10 +55,7 @@
     return true;
   }
 
-  /* Community Mods is not loaded into every scene. Where it is absent there is
-   * no remount to survive, which is not a failure - only a manager that is
-   * present but missing the function is.
-   */
+  // Community Mods is absent from some scenes; there is no remount to survive.
   function installRemountClientMods() {
     var mgr = root.CommunityModsManager;
 

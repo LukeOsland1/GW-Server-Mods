@@ -1,20 +1,4 @@
-/* Strategic icons for units the base game has never heard of.
- *
- * The atlas is built once, at startup: icon_atlas.js holds a hardcoded list of
- * names, mods extend it through this scene, and sendIconList() hands the result
- * to the engine. Nothing rebuilds it afterwards - a name pushed later is
- * accepted and ignored, which is why a modded unit shows the fallback dot.
- *
- * The icon files themselves are already there. A mod shipping strategic icons
- * shadows them into ui/main/atlas/icon_atlas/img/strategic_icons/, and client
- * mods are mounted before this scene runs. So the fix is not to mount anything,
- * it is to name every icon on disk rather than only the ones the base game
- * knows.
- *
- * Enumerating is async and the scene sends its list as soon as this file
- * returns, so sendIconList is wrapped rather than raced: the scene's own call
- * is what triggers the enumeration, and the list goes out once, complete.
- */
+// The atlas is built once at startup and never rebuilt. See design.md.
 (function () {
   var ICON_DIR = "/ui/main/atlas/icon_atlas/img/strategic_icons/";
   var MARK = "__gwServerModsPatched";
