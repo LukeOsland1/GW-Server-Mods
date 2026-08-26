@@ -22,8 +22,10 @@
   function mountAtRoot(mod) {
     var deferred = $.Deferred();
 
+    // Nothing can mount a folder at the root: zip.mount rejects one and there is
+    // no directory equivalent. Whether that matters is decided once the mod has
+    // been classified, in reportUnmountableMods.
     if (mod.fileSystem) {
-      // The game already exposes server_mods folders at the root.
       deferred.resolve(true);
       return deferred.promise();
     }
@@ -80,6 +82,25 @@
       });
 
     return deferred.promise();
+  }
+
+  // A folder-installed server mod the client has to render cannot be made
+  // visible to it. An AI-only one is unaffected, so this waits for the
+  // classification rather than warning about every folder mod.
+  function reportUnmountableMods() {
+    var stranded = _.filter(
+      ns.manifest.clientRelevantServerMods(),
+      function (mod) {
+        return mod.fileSystem;
+      }
+    );
+
+    _.forEach(stranded, function (mod) {
+      ns.alarm("filesystem_server_mod", {
+        identifier: mod.identifier,
+        path: mod.installedPath,
+      });
+    });
   }
 
   function verify(mods) {
@@ -154,6 +175,8 @@
           withContent ? remountContent() : null,
           ns.manifest.detectClientRelevance(mods)
         ).always(function () {
+          reportUnmountableMods();
+
           verify(mods).then(function (ok) {
             state = {
               mounted: ok,

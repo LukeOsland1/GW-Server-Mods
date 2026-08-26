@@ -12,8 +12,8 @@
   var WORDING = {
     cmm_unavailable:
       "Community Mods is not available, so server mods cannot be mounted.",
-    filesystem_mod:
-      "An unpacked server mod cannot be mounted for Galactic War.",
+    filesystem_server_mod:
+      "A server mod installed as a folder cannot be used in Galactic War; install it as a zip.",
     gate_unavailable:
       "Server mods are mounted, but co-op cannot check them between players.",
     identifiers_lost: "The battle may start without its server mods declared.",

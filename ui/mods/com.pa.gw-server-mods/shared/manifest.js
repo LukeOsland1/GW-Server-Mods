@@ -76,24 +76,44 @@
     });
   }
 
-  // A faction splits its art: models in the server mod, textures in the paired
-  // client mod. See design.md.
+  // A faction splits its art: models in the server mod, textures in the client
+  // mod it names in `companions`. See design.md.
   function pairedClientMods() {
-    if (!available() || !_.isFunction(manager().activeClientZipMods)) {
+    if (!available() || !_.isFunction(manager().activeInstalledClientMods)) {
       return [];
     }
 
-    var bases = _.map(activeServerMods(), function (mod) {
-      return mod.identifier.replace(/[-.]server$/, "");
+    var wanted = [];
+
+    _.forEach(manager().activeServerModsToMount(), function (mod) {
+      if (_.isArray(mod.companions)) {
+        wanted = _.union(wanted, _.map(mod.companions, normalizeIdentifier));
+      }
     });
 
-    var clients = _.map(manager().activeClientZipMods(), describe);
+    if (!wanted.length) {
+      return [];
+    }
 
-    return _.filter(clients, function (mod) {
-      return _.some(bases, function (base) {
-        return base.length && mod.identifier.indexOf(base) === 0;
+    // Folder-installed mods are excluded from activeClientZipMods, and a
+    // companion is just as likely to be one.
+    var paired = _.filter(
+      _.map(manager().activeInstalledClientMods(), describe),
+      function (mod) {
+        return _.contains(wanted, mod.identifier);
+      }
+    );
+
+    if (paired.length !== wanted.length) {
+      ns.log("companion client mods not all active", {
+        wanted: wanted,
+        mounted: _.map(paired, function (mod) {
+          return mod.identifier;
+        }),
       });
-    });
+    }
+
+    return paired;
   }
 
   // Trees the server reads alone. Anything else under pa/ - units, terrain and

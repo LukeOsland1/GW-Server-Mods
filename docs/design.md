@@ -57,8 +57,26 @@ No mod is named in the code and no unit specs are bundled. The set comes from
 `community-mods-server` aggregate, which is derived from the others and so is not something a
 player can be missing.
 
-An unpacked (`fileSystem`) server mod has no zip to root-mount. It reaches
-`/server_mods/<id>/` but not the referee, and raises `filesystem_mod`.
+### Folder-installed server mods do not work
+
+A server mod installed as a folder rather than a zip cannot be reached by the client.
+`zip.mount` returns `false` for a directory and there is no directory equivalent, so its
+content never arrives at the VFS root: the referee cannot read its unit specs and the
+renderer has no models. Nothing here can fix that, so it raises `filesystem_server_mod`
+and tells the player to install the mod as a zip instead.
+
+An earlier version of this file claimed such mods needed no mount because the game already
+exposed `server_mods` folders at the root. That was wrong, and instructively so: the
+evidence was `coui://pa/ai_queller/...` resolving for a folder-installed Queller, but the
+base game ships `pa_ex1/ai_queller/`, so the probe was reading stock content at the same
+path. A mod adding a path the base game does not have - `pa/units/l_*` - returns 404.
+
+The alarm is raised only for folder mods the client has to render, so an AI-only one like
+Queller stays quiet: its content is genuinely server-side and its absence from the root
+costs nothing.
+
+Folder-installed **client** mods are unaffected - `client_mods/` folders do reach the root,
+confirmed against a companion supplying textures from one.
 
 ## Keeping the mounts
 
