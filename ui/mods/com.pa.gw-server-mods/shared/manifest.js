@@ -96,6 +96,77 @@
     });
   }
 
+  // Trees the server reads alone. Anything else under pa/ - units, terrain and
+  // its CSG models, effects, anim - has to be on the client too. Excluding the
+  // known server-only trees rather than listing the rendered ones means an
+  // unrecognised tree is treated as client-relevant: too strict, never too lax.
+  var SERVER_ONLY = /^ai(_|$)/;
+
+  var relevance = {};
+
+  function modRoot(mod) {
+    return mod.fileSystem
+      ? mod.installedPath
+      : "/server_mods/" + mod.identifier + "/";
+  }
+
+  function leafName(path) {
+    var trimmed = String(path).replace(/\/$/, "");
+
+    return trimmed.slice(trimmed.lastIndexOf("/") + 1);
+  }
+
+  function detectRelevance(mod) {
+    var deferred = $.Deferred();
+
+    if (!api.file || !_.isFunction(api.file.list)) {
+      relevance[mod.identifier] = true;
+      deferred.resolve();
+      return deferred.promise();
+    }
+
+    api.file.list(modRoot(mod) + "pa/", false).then(
+      function (listing) {
+        var entries =
+          listing && listing.length ? listing : _.keys(listing || {});
+
+        relevance[mod.identifier] = _.some(entries, function (entry) {
+          return !SERVER_ONLY.test(leafName(entry));
+        });
+
+        deferred.resolve();
+      },
+      function () {
+        // Unknown shape, so assume the client needs it.
+        relevance[mod.identifier] = true;
+        deferred.resolve();
+      }
+    );
+
+    return deferred.promise();
+  }
+
+  function detectClientRelevance(mods) {
+    return $.when.apply(
+      $,
+      _.map(mods, function (mod) {
+        return detectRelevance(mod);
+      })
+    );
+  }
+
+  // Only these need to match between host and viewer. Empty until a mount has
+  // run, and the gate treats that as "require everything" rather than nothing.
+  function clientRelevantServerMods() {
+    return _.filter(activeServerMods(), function (mod) {
+      return relevance[mod.identifier] === true;
+    });
+  }
+
+  function relevanceKnown() {
+    return _.keys(relevance).length > 0;
+  }
+
   function identifiers() {
     return _.map(activeServerMods(), function (mod) {
       return mod.identifier;
@@ -112,6 +183,9 @@
     available: available,
     activeServerMods: activeServerMods,
     pairedClientMods: pairedClientMods,
+    detectClientRelevance: detectClientRelevance,
+    clientRelevantServerMods: clientRelevantServerMods,
+    relevanceKnown: relevanceKnown,
     identifiers: identifiers,
     rawIdentifiers: rawIdentifiers,
     normalizeIdentifier: normalizeIdentifier,

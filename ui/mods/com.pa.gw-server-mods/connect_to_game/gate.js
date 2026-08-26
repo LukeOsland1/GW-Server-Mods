@@ -9,8 +9,19 @@
   // Empty until the server asks for a manifest.
   var hostRequired = [];
 
+  // Only mods the client has to render need to match. Until a mount has
+  // classified them, require all of them rather than none.
+  function requiredServerMods() {
+    if (!ns.manifest.relevanceKnown()) {
+      ns.log("server mods unclassified, requiring all");
+      return ns.manifest.activeServerMods();
+    }
+
+    return ns.manifest.clientRelevantServerMods();
+  }
+
   function addHostServerMods(payload) {
-    var mods = ns.manifest.activeServerMods();
+    var mods = requiredServerMods();
 
     if (!mods.length) {
       return payload;

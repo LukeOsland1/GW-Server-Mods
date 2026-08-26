@@ -150,7 +150,10 @@
 
     $.when.apply($, rootMounts).always(function () {
       $.when(CommunityModsManager.mountServerMods()).always(function () {
-        $.when(withContent ? remountContent() : null).always(function () {
+        $.when(
+          withContent ? remountContent() : null,
+          ns.manifest.detectClientRelevance(mods)
+        ).always(function () {
           verify(mods).then(function (ok) {
             state = {
               mounted: ok,
