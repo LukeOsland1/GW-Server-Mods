@@ -132,6 +132,30 @@ than getting a new one, and a mismatch lands on the mod-mismatch screen the game
 Both payloads are augmented at `model.send_message`, not by reimplementing the functions that
 build them.
 
+### Which server mods have to match
+
+Not all of them. A server mod only has to be on the viewer's client if the client renders
+its content, and the marker is what it ships under `pa/`:
+
+| Mod                     | `pa/` trees                           | Required |
+| ----------------------- | ------------------------------------- | -------- |
+| Legion Expansion        | ammo, ai, anim, effects, units, tools | yes      |
+| Alien Worlds            | terrain (89 `.papa` CSG models)       | yes      |
+| Simple Biomes, tetctree | terrain                               | yes      |
+| Queller AI              | `ai_queller`                          | no       |
+
+The test excludes the server-only trees - anything matching `ai` or `ai_*` - rather than
+listing the rendered ones. An unrecognised tree is then treated as client-relevant, which
+is too strict rather than too lax: a guard that wrongly blocks a join is visible, one that
+wrongly allows it produces a battle that fails later.
+
+A units-only rule was considered and rejected. `pa/units/unit_list.json` is a reliable
+marker for a unit mod, because registry files have no append mechanism, but Alien Worlds
+ships 89 CSG models with no units at all and would have been excluded.
+
+Classification needs the mods mounted, so it runs as part of the mount. Until it has, the
+gate requires every active server mod rather than none.
+
 |                                 | Host publishes | Viewer reports                           |
 | ------------------------------- | -------------- | ---------------------------------------- |
 | Server mod the host runs        | yes            | yes, if the viewer has it                |
