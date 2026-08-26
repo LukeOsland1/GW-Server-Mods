@@ -49,7 +49,9 @@
     ns.capability.remember(identifiers, names, versions);
 
     ns.log("published host server mods", {
-      identifiers: ns.manifest.identifiers(),
+      identifiers: _.map(mods, function (mod) {
+        return mod.identifier;
+      }),
     });
 
     return payload;
