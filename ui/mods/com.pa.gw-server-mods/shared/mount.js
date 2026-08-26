@@ -160,9 +160,12 @@
       return deferred.promise();
     }
 
-    var rootMounts = _.map(mods, function (mod) {
-      return mountAtRoot(mod);
-    });
+    var rootMounts = _.map(
+      mods.concat(ns.manifest.pairedClientMods()),
+      function (mod) {
+        return mountAtRoot(mod);
+      }
+    );
 
     $.when.apply($, rootMounts).always(function () {
       $.when(CommunityModsManager.mountServerMods()).always(function () {

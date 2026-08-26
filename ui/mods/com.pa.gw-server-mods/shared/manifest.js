@@ -84,6 +84,28 @@
     });
   }
 
+  /* Art for a faction's units is usually split: the server mod carries models,
+   * its paired client mod carries textures. The renderer needs both at the VFS
+   * root, so the pairing has to be resolvable from the identifier.
+   */
+  function pairedClientMods() {
+    if (!available() || !_.isFunction(manager().activeClientZipMods)) {
+      return [];
+    }
+
+    var bases = _.map(activeServerMods(), function (mod) {
+      return mod.identifier.replace(/[-.]server$/, "");
+    });
+
+    var clients = _.map(manager().activeClientZipMods(), describe);
+
+    return _.filter(clients, function (mod) {
+      return _.some(bases, function (base) {
+        return base.length && mod.identifier.indexOf(base) === 0;
+      });
+    });
+  }
+
   function identifiers() {
     return _.map(activeServerMods(), function (mod) {
       return mod.identifier;
@@ -99,6 +121,7 @@
   ns.manifest = {
     available: available,
     activeServerMods: activeServerMods,
+    pairedClientMods: pairedClientMods,
     identifiers: identifiers,
     rawIdentifiers: rawIdentifiers,
     normalizeIdentifier: normalizeIdentifier,
