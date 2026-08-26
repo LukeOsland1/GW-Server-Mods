@@ -47,6 +47,8 @@
     payload.required_names_by_id = names;
     payload.required_versions_by_id = versions;
 
+    ns.capability.remember(identifiers, names, versions);
+
     ns.log("published host server mods", {
       identifiers: ns.manifest.identifiers(),
     });
@@ -126,6 +128,12 @@
         hostRequired = _.map(
           payload.required_identifiers,
           ns.manifest.normalizeIdentifier
+        );
+
+        ns.capability.remember(
+          hostRequired,
+          payload.required_names_by_id,
+          payload.required_versions_by_id
         );
 
         ns.log("host required mods received", { identifiers: hostRequired });
