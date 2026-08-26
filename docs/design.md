@@ -165,6 +165,20 @@ start, so they are raised on screen as well as in the console, in wording a play
 act on. The banner is a bonus rather than the report: not every scene composites its root
 document, `live_game` in particular.
 
+### Logging
+
+PA's log file keeps only the **first** console argument, so every call builds one
+concatenated string. Passing `message, detail` lands in the log as `message` alone.
+
+`api.debug.log` is not used and should not be. It is a forwarder -
+`Function.apply.call(console.log, console, arguments)` - so it truncates identically, and
+it adds two problems: every call is gated on a `debug_allow_logs` local setting that is
+unset by default, so output vanishes for exactly the user who needs it; and the log
+records its call site (`boot.js`) rather than ours, losing which module spoke.
+
+Stock agrees with itself here: Community Mods and the `[GW COOP]` code both concatenate
+rather than pass multiple arguments.
+
 `cmm_unavailable` and `gate_unavailable` matter most - a partly installed guard is worse
 than none, because it looks like enforcement.
 
