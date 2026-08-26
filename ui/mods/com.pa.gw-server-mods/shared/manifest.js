@@ -102,7 +102,33 @@
   // unrecognised tree is treated as client-relevant: too strict, never too lax.
   var SERVER_ONLY = /^ai(_|$)/;
 
-  var relevance = {};
+  // Each scene is its own page with its own copy of this module, so the answer
+  // is persisted: the mount that classifies runs in one scene and the gate that
+  // reads it runs in another.
+  var RELEVANCE_KEY = "gw_server_mods_relevance";
+  var relevance = null;
+
+  function loadRelevance() {
+    if (relevance) {
+      return relevance;
+    }
+
+    try {
+      relevance = JSON.parse(sessionStorage.getItem(RELEVANCE_KEY) || "{}");
+    } catch (e) {
+      relevance = {};
+    }
+
+    return relevance;
+  }
+
+  function saveRelevance() {
+    try {
+      sessionStorage.setItem(RELEVANCE_KEY, JSON.stringify(loadRelevance()));
+    } catch (e) {
+      ns.log("server mod classification not persisted");
+    }
+  }
 
   function modRoot(mod) {
     return mod.fileSystem
@@ -120,7 +146,7 @@
     var deferred = $.Deferred();
 
     if (!api.file || !_.isFunction(api.file.list)) {
-      relevance[mod.identifier] = true;
+      loadRelevance()[mod.identifier] = true;
       deferred.resolve();
       return deferred.promise();
     }
@@ -130,7 +156,7 @@
         var entries =
           listing && listing.length ? listing : _.keys(listing || {});
 
-        relevance[mod.identifier] = _.some(entries, function (entry) {
+        loadRelevance()[mod.identifier] = _.some(entries, function (entry) {
           return !SERVER_ONLY.test(leafName(entry));
         });
 
@@ -138,7 +164,7 @@
       },
       function () {
         // Unknown shape, so assume the client needs it.
-        relevance[mod.identifier] = true;
+        loadRelevance()[mod.identifier] = true;
         deferred.resolve();
       }
     );
@@ -147,24 +173,28 @@
   }
 
   function detectClientRelevance(mods) {
-    return $.when.apply(
-      $,
-      _.map(mods, function (mod) {
-        return detectRelevance(mod);
-      })
-    );
+    return $.when
+      .apply(
+        $,
+        _.map(mods, function (mod) {
+          return detectRelevance(mod);
+        })
+      )
+      .always(saveRelevance);
   }
 
   // Only these need to match between host and viewer. Empty until a mount has
   // run, and the gate treats that as "require everything" rather than nothing.
   function clientRelevantServerMods() {
+    var known = loadRelevance();
+
     return _.filter(activeServerMods(), function (mod) {
-      return relevance[mod.identifier] === true;
+      return known[mod.identifier] === true;
     });
   }
 
   function relevanceKnown() {
-    return _.keys(relevance).length > 0;
+    return _.keys(loadRelevance()).length > 0;
   }
 
   function identifiers() {

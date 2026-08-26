@@ -153,8 +153,14 @@ A units-only rule was considered and rejected. `pa/units/unit_list.json` is a re
 marker for a unit mod, because registry files have no append mechanism, but Alien Worlds
 ships 89 CSG models with no units at all and would have been excluded.
 
-Classification needs the mods mounted, so it runs as part of the mount. Until it has, the
-gate requires every active server mod rather than none.
+Classification needs the mods mounted, so it runs as part of the mount, and the answer is
+persisted in `sessionStorage`. That is not an optimisation: the mount that classifies runs
+in one scene and the gate that reads it runs in another, and each scene is a separate page
+with its own copy of this module. Held in memory alone, the gate never sees a
+classification and silently falls back to requiring everything.
+
+Until a classification exists the gate does require every active server mod, rather than
+none.
 
 |                                 | Host publishes | Viewer reports                           |
 | ------------------------------- | -------------- | ---------------------------------------- |
