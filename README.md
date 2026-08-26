@@ -26,6 +26,10 @@ a remote or dedicated server cannot receive mod files at all: the base game's up
 tied to the custom-game lobby that Galactic War never visits, and the Galactic War server
 state has no handler to receive it. That needs a server mod, not this one.
 
+## How it works
+
+See [docs/design.md](docs/design.md).
+
 ## Requirements
 
 - Planetary Annihilation: TITANS
