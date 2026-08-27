@@ -133,11 +133,9 @@ returns, so `sendIconList` is wrapped rather than raced - the scene's own call t
 the enumeration and the list goes out once, complete.
 
 Two known limits. This duplicates Legion's own mechanism rather than restoring it; the
-better fix is to make Galactic War load `ui_mod_list_for_server.js`, which would also
-restore the Legion UI scripts (`live_game_build_bar`, `live_game_selection` and others)
-that are silently missing in Galactic War today. And the atlas grows from 132 to 274
-names with one faction loaded; PA's atlas texture limit is unknown, and an overflow would
-show up as _other_ icons breaking rather than the modded ones.
+better fix is to make Galactic War load `ui_mod_list_for_server.js`. And the atlas grows
+from 132 to 274 names with one faction loaded; PA's atlas texture limit is unknown, and an
+overflow would show up as _other_ icons breaking rather than the modded ones.
 
 ## The co-op guard
 
