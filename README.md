@@ -11,15 +11,28 @@ and in co-op it makes the host the source of truth about which ones are in play.
 
 - Mounts every active server mod for Galactic War battles, generically. No mod is named in
   the code and no unit specs are bundled, so nothing goes stale when a server mod updates.
+- Mounts the client mod a server mod names as its companion, because a faction usually
+  splits its art between the two: models in one, textures in the other.
 - Keeps those mounts alive across Galactic War's remount cycle, which otherwise drops them
   part way through battle setup.
-- In co-op, publishes the host's active server mods to the game's own required-mod check. A
-  viewer missing one is stopped at the existing mod-mismatch screen and told which mod and
-  why, rather than landing in a battle that fails.
+- Adds strategic icons for modded units, which Galactic War otherwise draws as a plain dot.
+- In co-op, publishes the host's server mods to the game's own required-mod check. A viewer
+  missing one is stopped at the existing mod-mismatch screen and told which mod and why,
+  rather than landing in a battle that fails.
+- Only the mods a client has to render need to match. A mod adding units or terrain has to
+  be on both sides; one that only adds AI data does not, so it never blocks a join.
 - A viewer running a server mod the host is not gets to play regardless — they are simply
   recorded as not sharing it, so features can offer only what the host actually supports.
 
 ## What it does not do
+
+**Server mods installed as a folder cannot be used.** There is no way to mount a directory
+into the game's virtual filesystem, so such a mod's files never reach the client: the
+referee cannot read its unit specs and the renderer has no models, leaving units missing
+rather than merely untextured. The mod detects this and says so on the galaxy map instead
+of letting you find out mid-battle. Install the mod as a zip, which is what the in-game
+Community Mod Manager does. Server mods that only add AI data are unaffected, and client
+mods installed as a folder are fine.
 
 Only a locally hosted Galactic War is supported, which is what co-op uses. A Galactic War on
 a remote or dedicated server cannot receive mod files at all: the base game's upload path is
