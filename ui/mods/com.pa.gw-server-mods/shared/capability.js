@@ -44,7 +44,10 @@
     return cached;
   }
 
-  function hostHasServerMod(identifier) {
+  // The remembered set is the host's whole required list, client mods
+  // included, so this answers "does the host require it", not "is it a
+  // server mod".
+  function hostRequiresMod(identifier) {
     var wanted = ns.manifest.normalizeIdentifier(identifier);
 
     return !!wanted.length && read().identifiers.indexOf(wanted) !== -1;
@@ -66,6 +69,6 @@
     remember: remember,
   };
 
-  ns.hostHasServerMod = hostHasServerMod;
+  ns.hostRequiresMod = hostRequiresMod;
   ns.hostServerMods = hostServerMods;
 })(window);

@@ -197,9 +197,10 @@ none.
 That last row is deliberate. `galacticWarMod` means "everyone must match on this" for client
 mods today, and this mod must not quietly soften it for server mods.
 
-`GwServerMods.hostHasServerMod(identifier)` answers what the host published, so a feature can
-offer only what the host supports — a viewer running Legion against a host that is not should
-not be offered Legion.
+`GwServerMods.hostRequiresMod(identifier)` answers whether the host's published required
+list names the identifier — client or server mod alike — so a feature can offer only what
+the host supports — a viewer running Legion against a host that is not should not be
+offered Legion.
 
 ## Identifier case
 
@@ -252,7 +253,7 @@ There are no tests; verification is loading the game.
    from observing it**, which is why it alarms rather than failing quietly.
 3. Mounts survive `gw_play` → `live_game`.
 4. Co-op with a viewer missing the host's server mod — mismatch screen names it.
-5. Co-op with a viewer running an extra server mod — joins, and `hostHasServerMod` is false.
+5. Co-op with a viewer running an extra server mod — joins, and `hostRequiresMod` is false.
    Then set `"galacticWarMod": true` on that mod and repeat: the viewer must be blocked.
 6. Host and viewer on different versions of the same mod — version mismatch.
 7. A second, unrelated server mod, to confirm nothing is specific to one mod.
