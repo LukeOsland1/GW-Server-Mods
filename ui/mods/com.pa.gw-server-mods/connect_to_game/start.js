@@ -3,8 +3,10 @@
   var ns = root.GwServerMods || (root.GwServerMods = {});
   var MARK = "__gwServerModsPatched";
 
+  // The same suffix test Community Mods uses to skip these modes; the two
+  // wrappers are nested on one call and must agree about what is GW.
   function isGwMode(mode) {
-    return _.isString(mode) && mode.toLowerCase().indexOf("gw") !== -1;
+    return _.isString(mode) && mode.substr(-2, 2).toLowerCase() === "gw";
   }
 
   function applyIdentifiers() {
