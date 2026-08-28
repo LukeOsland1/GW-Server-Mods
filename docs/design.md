@@ -97,10 +97,14 @@ mod:
 | `l_raptor_diffuse.papa` (texture) | absent        | 1,365,902 bytes |
 
 Mounting only the server zip therefore produces a correctly shaped commander rendered
-entirely in white. `pairedClientMods()` matches active client zip mods whose identifier
-shares a prefix with an active server mod's, after stripping a trailing `-server`. That
-is a naming convention rather than a guarantee, and it is the weakest link in this
-design.
+entirely in white. `pairedClientMods()` reads each active server mod's declared
+`companions` array and mounts the active client mods it names — Legion's server
+`modinfo.json` declares `"companions": ["com.pa.legion-expansion-client"]`. The
+dependency is stated by the mod author rather than inferred from a name. A declared
+companion that is not active is logged as `companion client mods not all active` rather
+than alarmed — the right severity, since the failure is a white unit and not a broken
+battle. The residual risk is a server mod that ships split art but declares no
+`companions`: it gets no pairing at all, silently.
 
 ### The content catalogue
 
