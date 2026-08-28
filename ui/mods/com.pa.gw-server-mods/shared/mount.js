@@ -69,6 +69,111 @@
     return api.content.remount();
   }
 
+  function readUnitList(url) {
+    var deferred = $.Deferred();
+
+    $.ajax({ url: url, dataType: "text", cache: url.indexOf("coui://") !== 0 })
+      .done(function (data) {
+        var parsed = data;
+
+        if (_.isString(data)) {
+          try {
+            parsed = JSON.parse(data);
+          } catch (e) {
+            parsed = null;
+          }
+        }
+
+        deferred.resolve(
+          parsed && _.isArray(parsed.units) ? parsed.units : null
+        );
+      })
+      .fail(function () {
+        deferred.resolve(null);
+      });
+
+    return deferred.promise();
+  }
+
+  function reportUnmerged(detail, reason) {
+    detail.reason = reason;
+
+    if (detail.lists > 1) {
+      ns.alarm("unit_list_unmerged", detail);
+    } else {
+      ns.log("unit list not merged", detail);
+    }
+  }
+
+  // Every faction ships its own unit_list.json and the root mounts shadow each
+  // other, so the referee would only see the last one. See design.md.
+  function mergeUnitList(mods) {
+    var deferred = $.Deferred();
+    var mgr = CommunityModsManager;
+
+    if (
+      _.isFunction(mgr.mergeUnitServerMods) &&
+      mgr.mergeUnitServerMods() === false
+    ) {
+      ns.log("unit list merge disabled by Community Mods");
+      deferred.resolve();
+      return deferred.promise();
+    }
+
+    // The root list is read through coui://, never spec://: the engine caches a
+    // spec:// path after its first read, and the referee reads this one through
+    // spec://, so a spec:// read here would pin the unmerged list for the whole
+    // process. See design.md.
+    var reads = [readUnitList("coui://pa/units/unit_list.json")].concat(
+      _.map(
+        _.filter(mods, function (mod) {
+          return !mod.fileSystem;
+        }),
+        function (mod) {
+          return readUnitList(
+            "spec:/" + ns.manifest.modRoot(mod) + "pa/units/unit_list.json"
+          );
+        }
+      )
+    );
+
+    $.when.apply($, reads).then(function () {
+      var lists = _.toArray(arguments);
+      var modLists = _.filter(lists.slice(1), _.isArray);
+
+      if (!modLists.length) {
+        deferred.resolve();
+        return;
+      }
+
+      var merged = _.union.apply(_, [lists[0] || []].concat(modLists));
+      var detail = { units: merged.length, lists: modLists.length };
+
+      if (!api.file || !_.isFunction(api.file.mountMemoryFiles)) {
+        reportUnmerged(detail, "mountMemoryFiles unavailable");
+        deferred.resolve();
+        return;
+      }
+
+      $.when(
+        api.file.mountMemoryFiles({
+          "/pa/units/unit_list.json": JSON.stringify({ units: merged }),
+        })
+      ).then(
+        function () {
+          ns.log("merged unit list", detail);
+          deferred.resolve();
+        },
+        function (error) {
+          reportUnmerged(detail, String(error));
+          deferred.resolve();
+        }
+      );
+    });
+
+    return deferred.promise();
+  }
+
   function probe(path) {
     var deferred = $.Deferred();
     var bustable = path.indexOf("coui://") === 0;
@@ -173,6 +278,7 @@
       $.when(CommunityModsManager.mountServerMods()).always(function () {
         $.when(
           withContent ? remountContent() : null,
+          mergeUnitList(mods),
           ns.manifest.detectClientRelevance(mods)
         ).always(function () {
           reportUnmountableMods();

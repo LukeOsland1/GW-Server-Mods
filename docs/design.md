@@ -57,6 +57,38 @@ No mod is named in the code and no unit specs are bundled. The set comes from
 `community-mods-server` aggregate, which is derived from the others and so is not something a
 player can be missing.
 
+### More than one faction
+
+Every faction server mod ships its own `pa/units/unit_list.json` — registry files have no
+append mechanism — and the root mounts shadow each other, so with Legion, Bugs and Exiles
+active only the last zip's list survives and the battle has one faction's units. The specs
+are all there; only the registry is lost. The referee reads that registry client side
+(`gw_referee.js` fetches `spec://pa/units/unit_list.json`), so the server's own mount-order
+merge never reaches it.
+
+`mergeUnitList()` therefore reads the root list and each mounted zip's
+`/server_mods/<id>/pa/units/unit_list.json`, unions them in mount order, and mounts the result
+at `/pa/units/unit_list.json` with `api.file.mountMemoryFiles`. It is a memory file, so every
+`unmountAllMemoryFiles` drops it — and every unmount already re-runs the mount through the
+hooks, so it comes back with the zips. The referee then overwrites the same path with the
+cooked superset it derived from the merged list, in the order the hook wrapper guarantees.
+
+**`spec://` caches a path after its first read, for the life of the process.** Measured
+directly: after mounting the merged list, `coui://pa/units/unit_list.json` returned 575 units
+and `spec://pa/units/unit_list.json` still returned the 332 it had served earlier, while a
+memory file at a path never read before was visible through `spec://` at once — so this is a
+cache, not mount precedence. The root list is therefore read through `coui://` (with a
+cache-busting query, which `spec://` rejects), and nothing in this mod touches
+`spec://pa/units/unit_list.json` until the merged file is in place; `verify()` probes it only
+afterwards. A first version read it through `spec://` and pinned the unmerged list for the
+referee, which is why this rule exists.
+
+Community Mods generates a merged list of its own in `community-mods-server.zip`, but only
+when every mod's `unitList` had been populated by its asynchronous filesystem scan at the
+moment the zip was regenerated; a copy without any list was observed. It is not used as a
+source for that reason. Community Mods' `mergeUnitServerMods` switch is honoured: when a
+player has turned merging off, this mod does not merge either.
+
 ### Folder-installed server mods do not work
 
 A server mod installed as a folder rather than a zip cannot be reached by the client.
