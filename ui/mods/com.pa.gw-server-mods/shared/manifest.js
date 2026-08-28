@@ -151,10 +151,12 @@
   }
 
   // An unpacked mod keeps its install folder name, not its identifier.
+  // Community Mods mounts a zip under the identifier's installed case, so the
+  // path must use rawIdentifier; the lower-cased form is for the gate only.
   function modRoot(mod) {
     return mod.fileSystem
       ? mod.installedPath
-      : "/server_mods/" + mod.identifier + "/";
+      : "/server_mods/" + mod.rawIdentifier + "/";
   }
 
   function leafName(path) {
