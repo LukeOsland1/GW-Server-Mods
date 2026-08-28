@@ -53,7 +53,7 @@
       // The gate lower-cases; the game needs the case it was installed under.
       rawIdentifier: (mod && mod.identifier) || identifier,
       displayName:
-        _.isString(mod.display_name) && mod.display_name.length
+        _.isString(mod && mod.display_name) && mod.display_name.length
           ? mod.display_name
           : identifier,
       version: normalizeVersion(mod && mod.version),
