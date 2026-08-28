@@ -12,13 +12,24 @@
   var WORDING = {
     cmm_unavailable:
       "Community Mods is not available, so server mods cannot be mounted.",
+    content_remount_unavailable:
+      "Server mod models and textures could not be registered, so modded units may be invisible.",
     filesystem_server_mod:
       "A server mod installed as a folder cannot be used in Galactic War; install it as a zip.",
+    gate_manifest_failed: "Your server mods could not be reported to the host.",
+    gate_publish_failed:
+      "Your server mods could not be published to the other players.",
     gate_unavailable:
       "Server mods are mounted, but co-op cannot check them between players.",
+    hooks_unavailable:
+      "Server mods are mounted, but the mounts may be dropped before the battle starts.",
     identifiers_lost: "The battle may start without its server mods declared.",
+    launch_unavailable:
+      "Server mods may not be mounted when a battle is launched.",
     mount_failed: "A server mod failed to mount.",
     probe_failed: "Server mods mounted but their files cannot be read.",
+    start_unavailable:
+      "Server mods may not be mounted when the battle connects.",
     zip_missing: "A server mod is enabled but not downloaded.",
   };
 
