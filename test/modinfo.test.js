@@ -1,0 +1,85 @@
+"use strict";
+
+// modinfo.json: every scene entry is a shipped file in the order the modules
+// depend on, and the release metadata agrees with the changelog.
+
+const { describe, it } = require("node:test");
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
+
+const {
+  MOD_ROOT,
+  REPO_ROOT,
+  couiToFsPath,
+  modinfo,
+  sceneFiles,
+} = require("../scripts/lib/scene-loader.js");
+const { SHARED } = require("../scripts/lib/shared-scene.js");
+
+const info = modinfo();
+const scenes = Object.keys(info.scenes);
+
+function shipped(dir) {
+  return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const full = path.join(dir, entry.name);
+    return entry.isDirectory() ? shipped(full) : [full];
+  });
+}
+
+describe("modinfo scenes", () => {
+  it("name only files that exist", () => {
+    for (const scene of scenes) {
+      for (const entry of sceneFiles(scene)) {
+        assert.equal(fs.existsSync(couiToFsPath(entry)), true, entry);
+      }
+    }
+  });
+
+  it("load every shipped file somewhere", () => {
+    const referenced = new Set(
+      scenes.flatMap((scene) => sceneFiles(scene).map(couiToFsPath))
+    );
+
+    for (const file of shipped(MOD_ROOT)) {
+      assert.equal(referenced.has(file), true, path.relative(REPO_ROOT, file));
+    }
+  });
+
+  it("load the shared modules first, in dependency order", () => {
+    const expected = SHARED.map((file) => path.join(MOD_ROOT, file));
+
+    for (const scene of scenes.filter((name) => name !== "icon_atlas")) {
+      const files = sceneFiles(scene).map(couiToFsPath);
+      assert.deepEqual(files.slice(0, expected.length), expected, scene);
+      for (const own of files.slice(expected.length)) {
+        assert.equal(path.dirname(own), path.join(MOD_ROOT, scene), own);
+      }
+    }
+  });
+
+  it("give icon_atlas only its own script", () => {
+    assert.deepEqual(sceneFiles("icon_atlas").map(couiToFsPath), [
+      path.join(MOD_ROOT, "icon_atlas", "icons.js"),
+    ]);
+  });
+});
+
+describe("modinfo release metadata", () => {
+  it("is a Galactic War client mod", () => {
+    assert.equal(info.context, "client");
+    assert.equal(info.galacticWarMod, true);
+  });
+
+  it("has a changelog entry for its version", () => {
+    const changelog = fs.readFileSync(
+      path.join(REPO_ROOT, "CHANGELOG.md"),
+      "utf8"
+    );
+
+    assert.match(
+      changelog,
+      new RegExp("^## v" + info.version.replace(/\./g, "\\.") + " ", "m")
+    );
+  });
+});

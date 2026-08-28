@@ -296,7 +296,8 @@ so a war resumed after a mod update can lose units with no warning.
 
 ## Verification
 
-There are no tests; verification is loading the game.
+The unit tests ([`testing.md`](testing.md)) pin what each module does with the engine
+faked; whether the engine behaves as faked is verified by loading the game.
 
 1. Solo local war, launch a battle — server mod units present, no `commanders:[null]`.
 2. No `identifiers_lost` alarm, and `model.gameModIdentifiers()` holds the server mod at
