@@ -11,30 +11,35 @@
 
   var WORDING = {
     cmm_unavailable:
-      "Community Mods is not available, so server mods cannot be mounted.",
+      "!LOC:Community Mods is not active. Server mods cannot load in Galactic War. Enable Community Mods in the Mods menu, then restart PA.",
     content_remount_unavailable:
-      "Server mod models and textures could not be registered, so modded units may be invisible.",
+      "!LOC:PA did not register server mod models and textures. Modded units may be invisible. Restart PA. If this message returns, report it with your PA log.",
     filesystem_server_mod:
-      "A server mod installed as a folder cannot be used in Galactic War; install it as a zip.",
-    gate_manifest_failed: "Your server mods could not be reported to the host.",
+      "!LOC:This server mod is installed as a folder. Galactic War cannot use it. Install it as a zip from Community Mods.",
+    gate_manifest_failed:
+      "!LOC:GW Server Mods could not tell the host which server mods you run. The host cannot check your mods. Leave the game, restart PA, then join again.",
     gate_publish_failed:
-      "Your server mods could not be published to the other players.",
+      "!LOC:GW Server Mods could not tell the other players which server mods this battle needs. Players who do not have them may join. Restart PA, then host the battle again.",
     gate_unavailable:
-      "Server mods are mounted, but co-op cannot check them between players.",
+      "!LOC:Server mods loaded, but co-op cannot compare them between players. Players with different mods may join. Update GW Server Mods and Community Mods.",
     hooks_unavailable:
-      "Server mods are mounted, but the mounts may be dropped before the battle starts.",
-    identifiers_lost: "The battle may start without its server mods declared.",
+      "!LOC:Server mods loaded, but PA may unload them before the battle starts. Update GW Server Mods and Community Mods, then restart PA.",
+    identifiers_lost:
+      "!LOC:Another mod removed the server mods from the battle setup. The battle may start without them. Disable other Galactic War mods, then start again.",
     launch_unavailable:
-      "Server mods may not be mounted when a battle is launched.",
-    mount_failed: "A server mod failed to mount.",
-    probe_failed: "Server mods mounted but their files cannot be read.",
+      "!LOC:GW Server Mods could not attach to the battle launch. Server mods may not load. Update GW Server Mods, then restart PA.",
+    mount_failed:
+      "!LOC:This server mod did not load. Its zip may be damaged. Uninstall it in Community Mods, then install it again.",
+    probe_failed:
+      "!LOC:Server mods loaded, but PA cannot read their files. Modded units may be missing. Restart PA. If this message returns, reinstall the server mods.",
     start_unavailable:
-      "Server mods may not be mounted when the battle connects.",
-    zip_missing: "A server mod is enabled but not downloaded.",
+      "!LOC:GW Server Mods could not attach to the battle connection. Server mods may not load. Update GW Server Mods, then restart PA.",
+    zip_missing:
+      "!LOC:This server mod is enabled, but its zip is not downloaded. Open Community Mods and download it, or disable it.",
   };
 
   function describe(record) {
-    var wording = WORDING[record.code] || record.code;
+    var wording = loc(WORDING[record.code] || record.code);
     var identifier = record.detail && record.detail.identifier;
 
     return identifier ? wording + " (" + identifier + ")" : wording;
@@ -73,7 +78,8 @@
     }
 
     element.textContent =
-      "GW Server Mods: " +
+      loc("!LOC:GW Server Mods") +
+      ": " +
       _.map(_.uniq(raised, "code"), describe).join("  |  ");
   }
 
