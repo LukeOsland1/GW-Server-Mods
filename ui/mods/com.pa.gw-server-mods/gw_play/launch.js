@@ -1,5 +1,6 @@
 // The referee generates unit specs shortly after this, so the mounts have to be
-// in place. restartFight is the same trip after a defeat.
+// in place. Stock restartFight delegates to model.fight, so one patch covers
+// both entry points.
 (function (root) {
   var ns = root.GwServerMods || (root.GwServerMods = {});
   var MARK = "__gwServerModsPatched";
@@ -37,11 +38,8 @@
     // Ready before the player can click, not only once they have.
     ns.mount.run();
 
-    var fight = patchFight("fight");
-    var restart = patchFight("restartFight");
-
-    if (!fight || !restart) {
-      ns.alarm("launch_unavailable", { fight: fight, restartFight: restart });
+    if (!patchFight("fight")) {
+      ns.alarm("launch_unavailable", { fight: false });
     }
   } catch (e) {
     console.error("[GW-SM] " + ((e && (e.stack || e.message)) || e));
