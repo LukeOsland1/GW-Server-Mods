@@ -44,16 +44,6 @@
     return cached;
   }
 
-  function forget() {
-    cached = null;
-
-    try {
-      sessionStorage.removeItem(KEY);
-    } catch (e) {
-      // The in-memory copy is already cleared.
-    }
-  }
-
   function hostHasServerMod(identifier) {
     var wanted = ns.manifest.normalizeIdentifier(identifier);
 
@@ -74,7 +64,6 @@
 
   ns.capability = {
     remember: remember,
-    forget: forget,
   };
 
   ns.hostHasServerMod = hostHasServerMod;
