@@ -149,6 +149,25 @@ It must **not** run during a battle: it blanks the scene, and the models are alr
 loaded by then, so `live_game` holds the mounts with `remountContent: false`. Zip mounts
 themselves survive a remount - that was checked directly, before and after.
 
+## Launch progress
+
+Galactic War Overhaul shows a loading panel from the Fight click to the hand-off to
+`connect_to_game`, and exposes it as `model.gwoLaunchProgress`. This mod only reports
+into it: `mount.js` calls `stage()` when it starts mounting and again before the content
+remount. GWO owns the screen, so nothing here shows or hides it.
+
+Two facts make that safe without a load-order contract in the code:
+
+- `stage()` is a no-op outside a launch, so the scene-entry mount in `gw_play/launch.js`
+  and the mounts in `connect_to_game` and `live_game` report nothing.
+- The object is resolved at call time. GWO carries `priority: 200` and this mod the
+  default 100, so GWO loads later and the object does not exist when `mount.js` runs.
+
+That ordering is also what puts GWO's `model.fight` wrapper outside this mod's. Stock
+`fight` only marks a launch after the war is saved, so if this mod's priority were raised
+to GWO's or above, the server-mod mount would run before GWO's wrapper and the panel
+would arrive only once the mount had finished - the unindicated wait this exists to end.
+
 ## Strategic icons
 
 The icon atlas is built once, at startup. `icon_atlas.js` holds a hardcoded list of 132

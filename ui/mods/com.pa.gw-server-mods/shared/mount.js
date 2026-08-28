@@ -174,6 +174,23 @@
     return deferred.promise();
   }
 
+  // GWO's battle-preparation screen, when present. Resolved at call time:
+  // GWO loads after this mod, and outside a launch the call is a no-op there.
+  // See design.md.
+  function report(key) {
+    var progress = root.model && root.model.gwoLaunchProgress;
+
+    if (!progress || !_.isFunction(progress.stage)) {
+      return;
+    }
+
+    try {
+      progress.stage(loc(key));
+    } catch (e) {
+      ns.log("progress report failed " + ((e && e.message) || e));
+    }
+  }
+
   function probe(path) {
     var deferred = $.Deferred();
     var bustable = path.indexOf("coui://") === 0;
@@ -267,6 +284,8 @@
       return deferred.promise();
     }
 
+    report("!LOC:Mounting server mods");
+
     var rootMounts = _.map(
       mods.concat(ns.manifest.pairedClientMods()),
       function (mod) {
@@ -276,6 +295,10 @@
 
     $.when.apply($, rootMounts).always(function () {
       $.when(CommunityModsManager.mountServerMods()).always(function () {
+        if (withContent) {
+          report("!LOC:Registering server mod content");
+        }
+
         $.when(
           withContent ? remountContent() : null,
           mergeUnitList(mods),
