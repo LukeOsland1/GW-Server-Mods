@@ -152,7 +152,12 @@
     var mods = ns.manifest.activeServerMods();
 
     if (!mods.length) {
-      state = { mounted: true, at: Date.now(), mods: [] };
+      state = {
+        mounted: true,
+        at: Date.now(),
+        mods: [],
+        sequence: state.sequence + 1,
+      };
       deferred.resolve(true);
       return deferred.promise();
     }
