@@ -8,6 +8,11 @@
 
   var MARK = "__gwServerModsWrapped";
 
+  // The mount options the scene installed with, live_game's
+  // remountContent: false in particular. Wrappers fire long after install,
+  // so they must inherit these rather than default.
+  var runOptions;
+
   function remountAfter(previous) {
     if (!_.isFunction(previous) || previous[MARK]) {
       return previous;
@@ -23,7 +28,7 @@
           return true;
         }
 
-        return ns.mount.run();
+        return ns.mount.run(runOptions);
       });
     };
 
@@ -85,7 +90,9 @@
     return true;
   }
 
-  function install() {
+  function install(options) {
+    runOptions = options;
+
     var unmount = installUnmountAccessor();
     var remount = installRemountClientMods();
 
