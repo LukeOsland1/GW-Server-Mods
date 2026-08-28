@@ -335,11 +335,17 @@
       return running;
     }
 
-    running = runOnce(options).always(function () {
+    // A run with nothing to mount settles at once, so the clear can fire
+    // before this function returns; neither the assignment nor the return
+    // may come after it.
+    var current = runOnce(options);
+
+    running = current;
+    current.always(function () {
       running = null;
     });
 
-    return running;
+    return current;
   }
 
   ns.mount = {
