@@ -21,7 +21,7 @@
       function (listing) {
         var files = listing && listing.length ? listing : _.keys(listing || {});
         var known = model.strategicIcons();
-        var added = 0;
+        var added = [];
 
         _.forEach(files, function (file) {
           if (String(file).indexOf("icon_si_") === -1) {
@@ -30,14 +30,24 @@
 
           var name = nameOf(file);
 
-          if (name.length && known.indexOf(name) === -1) {
-            model.strategicIcons.push(name);
-            ++added;
+          if (
+            name.length &&
+            known.indexOf(name) === -1 &&
+            added.indexOf(name) === -1
+          ) {
+            added.push(name);
           }
         });
 
-        console.log("[GW-SM] strategic icons added=" + added);
-        deferred.resolve(added);
+        // One notification for the whole batch; the bound foreach would
+        // otherwise rebuild once per push.
+        if (added.length) {
+          known.push.apply(known, added);
+          model.strategicIcons.valueHasMutated();
+        }
+
+        console.log("[GW-SM] strategic icons added=" + added.length);
+        deferred.resolve(added.length);
       },
       function () {
         console.error("[GW-SM] could not list " + ICON_DIR);
