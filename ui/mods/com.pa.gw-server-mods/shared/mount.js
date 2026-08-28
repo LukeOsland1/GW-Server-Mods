@@ -108,12 +108,7 @@
     var checks = [probe("coui://server_mods/mods.json")];
 
     _.forEach(mods, function (mod) {
-      // An unpacked mod keeps its install folder name, not its identifier.
-      var root = mod.fileSystem
-        ? mod.installedPath
-        : "/server_mods/" + mod.identifier + "/";
-
-      checks.push(probe("coui:/" + root + "modinfo.json"));
+      checks.push(probe("coui:/" + ns.manifest.modRoot(mod) + "modinfo.json"));
     });
 
     // The referee's own input.

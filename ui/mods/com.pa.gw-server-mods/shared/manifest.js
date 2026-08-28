@@ -150,6 +150,7 @@
     }
   }
 
+  // An unpacked mod keeps its install folder name, not its identifier.
   function modRoot(mod) {
     return mod.fileSystem
       ? mod.installedPath
@@ -232,6 +233,7 @@
   ns.manifest = {
     available: available,
     activeServerMods: activeServerMods,
+    modRoot: modRoot,
     pairedClientMods: pairedClientMods,
     detectClientRelevance: detectClientRelevance,
     clientRelevantServerMods: clientRelevantServerMods,
