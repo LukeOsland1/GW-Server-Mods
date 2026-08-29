@@ -45,7 +45,9 @@ describe("gw_start mount", () => {
     assert.deepEqual(fixture.api.calls.zipMount, [
       ["/download/com.example.server.zip", "/", false],
     ]);
-    assert.equal(fixture.api.calls.remount.length, 1);
+    // No content remount: the scene reads through coui:, and the remount
+    // freezes the UI.
+    assert.equal(fixture.api.calls.remount.length, 0);
     assert.equal(ns.mount.state().mounted, true);
     assert.equal(ns.hooks, undefined);
     assert.deepEqual(ns.alarms(), []);

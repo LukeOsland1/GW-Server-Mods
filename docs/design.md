@@ -14,8 +14,8 @@ if (window.gNoMods || mode.substr(-2, 2).toLowerCase() == "gw") {
 }
 ```
 
-The branch it skips — `activeServerModIdentifiersToMount()` → `checkCompanionMods()` →
-`mountServerMods()` → call through — is complete and generic. Galactic War simply never
+The branch it skips â€” `activeServerModIdentifiersToMount()` â†’ `checkCompanionMods()` â†’
+`mountServerMods()` â†’ call through â€” is complete and generic. Galactic War simply never
 reaches it, so no server mod is mounted, the referee cannot read the mod's unit specs, and
 the server starts with `commanders:[null]`.
 
@@ -23,7 +23,7 @@ the server starts with `commanders:[null]`.
 
 Shipped code runs in Coherent UI's Chrome 40. No `let`, arrow functions, template literals
 or `class`; a parse error takes out the whole script rather than the line. `eslint.config.mjs`
-is the executable statement of that limit and its whitelist is exhaustive — no entry means
+is the executable statement of that limit and its whitelist is exhaustive â€” no entry means
 no. `ko`, `_` (lodash 3.9.3), `$` and `api` are globals, and every scene shares one JS scope,
 which is why each module is an IIFE that guards against being loaded twice.
 
@@ -47,10 +47,10 @@ of tries. **Anything a scene sets up during its own boot should be taken this wa
 
 Two mounts per server mod, both needed:
 
-| Mount                                | Who does it                              | Why                                                                                                                                   |
-| ------------------------------------ | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `/server_mods/<id>/` and `mods.json` | `CommunityModsManager.mountServerMods()` | What the server reads, including the `mount_order` manifest                                                                           |
-| `/`                                  | `shared/mount.js`                        | Galactic War's referee generates unit specs client side from `spec://pa/units/…`, and `/server_mods/<id>/` is not on that lookup path |
+| Mount                                | Who does it                              | Why                                                                                                                                     |
+| ------------------------------------ | ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `/server_mods/<id>/` and `mods.json` | `CommunityModsManager.mountServerMods()` | What the server reads, including the `mount_order` manifest                                                                             |
+| `/`                                  | `shared/mount.js`                        | Galactic War's referee generates unit specs client side from `spec://pa/units/â€¦`, and `/server_mods/<id>/` is not on that lookup path |
 
 No mod is named in the code and no unit specs are bundled. The set comes from
 `CommunityModsManager.activeServerModsToMount()`, minus the manager's own generated
@@ -59,8 +59,8 @@ player can be missing.
 
 ### More than one faction
 
-Every faction server mod ships its own `pa/units/unit_list.json` — registry files have no
-append mechanism — and the root mounts shadow each other, so with Legion, Bugs and Exiles
+Every faction server mod ships its own `pa/units/unit_list.json` â€” registry files have no
+append mechanism â€” and the root mounts shadow each other, so with Legion, Bugs and Exiles
 active only the last zip's list survives and the battle has one faction's units. The specs
 are all there; only the registry is lost. The referee reads that registry client side
 (`gw_referee.js` fetches `spec://pa/units/unit_list.json`), so the server's own mount-order
@@ -69,14 +69,14 @@ merge never reaches it.
 `mergeUnitList()` therefore reads the root list and each mounted zip's
 `/server_mods/<id>/pa/units/unit_list.json`, unions them in mount order, and mounts the result
 at `/pa/units/unit_list.json` with `api.file.mountMemoryFiles`. It is a memory file, so every
-`unmountAllMemoryFiles` drops it — and every unmount already re-runs the mount through the
+`unmountAllMemoryFiles` drops it â€” and every unmount already re-runs the mount through the
 hooks, so it comes back with the zips. The referee then overwrites the same path with the
 cooked superset it derived from the merged list, in the order the hook wrapper guarantees.
 
 **`spec://` caches a path after its first read, for the life of the process.** Measured
 directly: after mounting the merged list, `coui://pa/units/unit_list.json` returned 575 units
 and `spec://pa/units/unit_list.json` still returned the 332 it had served earlier, while a
-memory file at a path never read before was visible through `spec://` at once — so this is a
+memory file at a path never read before was visible through `spec://` at once â€” so this is a
 cache, not mount precedence. The root list is therefore read through `coui://` (with a
 cache-busting query, which `spec://` rejects), and nothing in this mod touches
 `spec://pa/units/unit_list.json` until the merged file is in place; `verify()` probes it only
@@ -119,11 +119,12 @@ observable is never written and the read is skipped when the key is absent.
 `manifest.load()` performs that read once; with Community Mods present it resolves at
 once, and `activeServerMods()` answers from whichever source is there.
 
-`mount.run({ rootOnly: true })` is what `gw_start/mount.js` asks for: the root mounts and
-the content remount, nothing else. There is no `/server_mods/` mount because there is no
+`mount.run({ rootOnly: true, remountContent: false })` is what `gw_start/mount.js` asks
+for: the root mounts, nothing else - the scene reads specs and portraits through `coui:`,
+which the zip mounts alone serve, and the content remount freezes the UI for seconds. There is no `/server_mods/` mount because there is no
 manager to make it and no server to read it, no unit-list merge because no referee runs
 here, and no probe of `mods.json` because it does not exist. Its purpose is to let a
-Galactic War mod show a server mod's commanders � specs and portraits � before the war is
+Galactic War mod show a server mod's commanders — specs and portraits — before the war is
 created. A battle mount still refuses to run without Community Mods, since the `rootOnly`
 path is the only one the fallback listing is fit for: re-mounting the merged unit list
 under a running battle would replace the referee's cooked one.
@@ -148,11 +149,11 @@ mod:
 
 Mounting only the server zip therefore produces a correctly shaped commander rendered
 entirely in white. `pairedClientMods()` reads each active server mod's declared
-`companions` array and mounts the active client mods it names — Legion's server
+`companions` array and mounts the active client mods it names â€” Legion's server
 `modinfo.json` declares `"companions": ["com.pa.legion-expansion-client"]`. The
 dependency is stated by the mod author rather than inferred from a name. A declared
 companion that is not active is logged as `companion client mods not all active` rather
-than alarmed — the right severity, since the failure is a white unit and not a broken
+than alarmed â€” the right severity, since the failure is a white unit and not a broken
 battle. The residual risk is a server mod that ships split art but declares no
 `companions`: it gets no pairing at all, silently.
 
@@ -213,7 +214,7 @@ _other_ icons breaking rather than the modded ones.
 
 ## Server mod scene scripts
 
-A server mod's `modinfo.json` may declare `scenes` like a client mod's � Legion's build
+A server mod's `modinfo.json` may declare `scenes` like a client mod's — Legion's build
 bar tabs, Bugs' research mechanic, Exiles' automatic extractor fire all live there. In a
 skirmish they load because Community Mods writes the union of every active server mod's
 `scenes` into the server zip's `ui/mods/ui_mod_list.js`
@@ -223,17 +224,17 @@ those scripts never load and the mechanics they carry are silently absent.
 
 `shared/server_ui.js` loads them from the scene scripts instead. `loadMods` is the
 game's own loader, a global in every scene, and `loadScript` behind it is a synchronous
-XHR � so a call from this mod's scene script runs to completion before the scene binds,
+XHR — so a call from this mod's scene script runs to completion before the scene binds,
 at the same point in the page's life the engine would have loaded them. The list comes
 from `manifest.scenes(scene)`: the union of the active server mods' `scenes`, computed
 where Community Mods is present and persisted to `sessionStorage` by every mount, because
 `live_game` and its panels have neither the manager nor a store to ask. Each URL loads
 once per page, and a URL the scene or the global list already carries is skipped, which
-is what keeps a skirmish � where the engine did load them � from loading them twice.
+is what keeps a skirmish — where the engine did load them — from loading them twice.
 
 A mount that lists no mods does not touch the persisted list. `connect_to_game` mounts
 as its scene loads, before Community Mods has read its store, and that run sees nothing
-� measured live: `mounted server mods {"ok":true,"count":0}` two seconds before
+— measured live: `mounted server mods {"ok":true,"count":0}` two seconds before
 `community mods ready`. Written through, it erased the list `gw_play` had persisted and
 every battle scene loaded nothing. Should the list be missing anyway, `serverUi.load`
 reads the store itself and loads late, after the scene has bound.
@@ -252,7 +253,7 @@ file separately.
 
 Galactic War co-op already validates client mods host-first, and the server side of that check
 (`server-script/states/gw_lobby.js`, `gw_campaign.js`) is set and version matching on opaque
-identifier strings — it does not care whether an identifier names a client mod or a server
+identifier strings â€” it does not care whether an identifier names a client mod or a server
 mod. `set_required_client_mods` is host-only. So server mods join the existing check rather
 than getting a new one, and a mismatch lands on the mod-mismatch screen the game already has.
 
@@ -289,24 +290,24 @@ classification and silently falls back to requiring everything.
 Until a classification exists the gate does require every active server mod, rather than
 none.
 
-|                                 | Host publishes | Viewer reports                           |
-| ------------------------------- | -------------- | ---------------------------------------- |
-| Server mod the host runs        | yes            | yes, if the viewer has it                |
-| Server mod only the viewer runs | n/a            | no — unless it declares `galacticWarMod` |
+|                                 | Host publishes | Viewer reports                             |
+| ------------------------------- | -------------- | ------------------------------------------ |
+| Server mod the host runs        | yes            | yes, if the viewer has it                  |
+| Server mod only the viewer runs | n/a            | no â€” unless it declares `galacticWarMod` |
 
-| Case                                                     | Result                                |
-| -------------------------------------------------------- | ------------------------------------- |
-| Host has it, viewer does not                             | Blocked, named on the mismatch screen |
-| Both have it, versions differ                            | Blocked as a version mismatch         |
-| Viewer has it, host does not                             | Joins; recorded as not shared         |
-| Viewer has it with `galacticWarMod: true`, host does not | Blocked — stock behaviour, unchanged  |
+| Case                                                     | Result                                 |
+| -------------------------------------------------------- | -------------------------------------- |
+| Host has it, viewer does not                             | Blocked, named on the mismatch screen  |
+| Both have it, versions differ                            | Blocked as a version mismatch          |
+| Viewer has it, host does not                             | Joins; recorded as not shared          |
+| Viewer has it with `galacticWarMod: true`, host does not | Blocked â€” stock behaviour, unchanged |
 
 That last row is deliberate. `galacticWarMod` means "everyone must match on this" for client
 mods today, and this mod must not quietly soften it for server mods.
 
 `GwServerMods.hostRequiresMod(identifier)` answers whether the host's published required
-list names the identifier — client or server mod alike — so a feature can offer only what
-the host supports — a viewer running Legion against a host that is not should not be
+list names the identifier â€” client or server mod alike â€” so a feature can offer only what
+the host supports â€” a viewer running Legion against a host that is not should not be
 offered Legion.
 
 ## Identifier case
@@ -355,19 +356,19 @@ so a war resumed after a mod update can lose units with no warning.
 The unit tests ([`testing.md`](testing.md)) pin what each module does with the engine
 faked; whether the engine behaves as faked is verified by loading the game.
 
-1. Solo local war, launch a battle — server mod units present, no `commanders:[null]`.
+1. Solo local war, launch a battle â€” server mod units present, no `commanders:[null]`.
 2. No `identifiers_lost` alarm, and `model.gameModIdentifiers()` holds the server mod at
    connect time. **This is the one assumption taken from reading the base game rather than
    from observing it**, which is why it alarms rather than failing quietly.
-3. Mounts survive `gw_play` → `live_game`.
-4. Co-op with a viewer missing the host's server mod — mismatch screen names it.
-5. Co-op with a viewer running an extra server mod — joins, and `hostRequiresMod` is false.
+3. Mounts survive `gw_play` â†’ `live_game`.
+4. Co-op with a viewer missing the host's server mod â€” mismatch screen names it.
+5. Co-op with a viewer running an extra server mod â€” joins, and `hostRequiresMod` is false.
    Then set `"galacticWarMod": true` on that mod and repeat: the viewer must be blocked.
-6. Host and viewer on different versions of the same mod — version mismatch.
+6. Host and viewer on different versions of the same mod â€” version mismatch.
 7. A second, unrelated server mod, to confirm nothing is specific to one mod.
-8. `gw_start` with a faction server mod enabled � `GwServerMods.mount.state().mounted` is
+8. `gw_start` with a faction server mod enabled — `GwServerMods.mount.state().mounted` is
    true and `coui:/` resolves one of its commander specs, with no Community Mods on the
    page.
-9. A Galactic War battle with Legion, Bugs and Exiles � Legion's build bar tabs and
+9. A Galactic War battle with Legion, Bugs and Exiles — Legion's build bar tabs and
    hotkeys, a Bugs research station unlocking a unit, an Exiles extractor firing on its
    own; then the same in a skirmish, where each must still load exactly once.
