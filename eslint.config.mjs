@@ -27,6 +27,7 @@ export default defineConfig([
         loc: "readonly",
         ko: "readonly",
         CommunityModsManager: "readonly",
+        loadMods: "readonly",
         globals: "readonly",
       },
       sourceType: "script",

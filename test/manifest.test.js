@@ -89,6 +89,7 @@ describe("manifest.activeServerMods", () => {
         installedPath: "/download/com.example.server.zip",
         fileSystem: true,
         galacticWarMod: true,
+        scenes: {},
       },
     ]);
   });
@@ -365,5 +366,220 @@ describe("manifest module", () => {
     );
 
     assert.equal(ctx.GwServerMods.manifest, first);
+  });
+});
+
+// The store Community Mods keeps, read through the stock `db` extender: the
+// extender returns the array and settles `ready` with it.
+function fakeKo(records) {
+  return {
+    observableArray: () => {
+      const store = () => records;
+      store.extend = () => {
+        store.ready = resolved(records);
+        return store;
+      };
+      return store;
+    },
+  };
+}
+
+function fallbackScene(records, options) {
+  const opts = options || {};
+  return scene(
+    Object.assign({}, opts, {
+      cmm: null,
+      stubs: Object.assign(
+        { ko: fakeKo(records), localStorage: { installedModsDB: "1" } },
+        opts.stubs
+      ),
+    })
+  );
+}
+
+describe("manifest.load", () => {
+  it("resolves at once with Community Mods present", () => {
+    const fixture = scene();
+    let outcome;
+
+    fixture.ns.manifest.load().then((ok) => {
+      outcome = ok;
+    });
+
+    assert.equal(outcome, true);
+    assert.equal(fixture.ns.manifest.listed(), true);
+  });
+
+  it("reads the enabled mods from the store without Community Mods, once", () => {
+    const fixture = fallbackScene([
+      mod({
+        identifier: "com.b",
+        context: "server",
+        enabled: true,
+        priority: 1,
+      }),
+      mod({
+        identifier: "com.a",
+        context: "server",
+        enabled: true,
+        priority: 5,
+      }),
+      mod({ identifier: "com.off", context: "server", enabled: false }),
+      mod({
+        identifier: "com.c",
+        context: "client",
+        enabled: true,
+        priority: 2,
+      }),
+      null,
+    ]);
+
+    assert.equal(fixture.ns.manifest.listed(), false);
+    fixture.ns.manifest.load();
+    fixture.ns.manifest.load();
+
+    assert.equal(fixture.ns.manifest.listed(), true);
+    // Community Mods' own call, _.sortByOrder(mods, "priority", "desc"), takes
+    // booleans for orders in lodash 3.9.3, so "desc" sorts ascending; the
+    // fallback reproduces that order rather than the intended one.
+    assert.deepEqual(fixture.ns.manifest.identifiers(), ["com.b", "com.a"]);
+    assert.deepEqual(fixture.codes(), []);
+    assert.equal(
+      fixture.console.lines.log.filter((line) =>
+        line.startsWith("[GW-SM] installed mods read without Community Mods")
+      ).length,
+      1
+    );
+  });
+
+  it("lists nothing when the store does not exist or ko is absent", () => {
+    const noStore = fallbackScene([mod()], { stubs: { localStorage: {} } });
+    noStore.ns.manifest.load();
+    assert.deepEqual(noStore.ns.manifest.activeServerMods(), []);
+
+    const noKo = fallbackScene([mod()], { stubs: { ko: undefined } });
+    noKo.ns.manifest.load();
+    assert.deepEqual(noKo.ns.manifest.activeServerMods(), []);
+    assert.deepEqual(noKo.codes(), []);
+  });
+
+  it("pairs companions from the store too", () => {
+    const fixture = fallbackScene([
+      mod({
+        identifier: "com.faction",
+        context: "server",
+        enabled: true,
+        companions: ["Com.Faction-Client"],
+      }),
+      mod({
+        identifier: "com.faction-client",
+        context: "client",
+        enabled: true,
+      }),
+      mod({ identifier: "com.unrelated", context: "client", enabled: true }),
+    ]);
+
+    assert.deepEqual(fixture.ns.manifest.pairedClientMods(), []);
+    fixture.ns.manifest.load();
+
+    assert.deepEqual(
+      fixture.ns.manifest.pairedClientMods().map((m) => m.identifier),
+      ["com.faction-client"]
+    );
+  });
+});
+
+describe("manifest.serverModInfo", () => {
+  it("finds an active mod by identifier in any case", () => {
+    const { ns } = scene({
+      cmmOptions: { serverMods: [mod({ identifier: "Com.Example.Server" })] },
+    });
+
+    assert.equal(
+      ns.manifest.serverModInfo(" com.example.server ").rawIdentifier,
+      "Com.Example.Server"
+    );
+    assert.equal(ns.manifest.serverModInfo("com.missing"), undefined);
+  });
+});
+
+describe("manifest.scenes", () => {
+  const A = "coui://ui/mods/a/live_game.js";
+  const B = "coui://ui/mods/b/live_game.js";
+
+  it("unions the scene lists of the active server mods", () => {
+    const { ns } = scene({
+      cmmOptions: {
+        serverMods: [
+          mod({ identifier: "com.a", scenes: { live_game: [A], bad: "x" } }),
+          mod({ identifier: "com.b", scenes: { live_game: [B, A] } }),
+          mod({ identifier: "com.c", scenes: null }),
+        ],
+      },
+    });
+
+    assert.deepEqual(ns.manifest.scenes(), { live_game: [A, B] });
+    assert.deepEqual(ns.manifest.scenes("live_game"), [A, B]);
+    assert.deepEqual(ns.manifest.scenes("gw_play"), []);
+  });
+
+  it("persists the list for the scenes that cannot list mods themselves", () => {
+    const storage = fakeSessionStorage();
+    const fixture = scene({ stubs: { sessionStorage: storage } });
+
+    fixture.ns.manifest.rememberScenes([
+      { scenes: { live_game: [A] } },
+      { scenes: { live_game: [B] } },
+    ]);
+
+    assert.deepEqual(JSON.parse(storage.store.gw_server_mods_scenes), {
+      live_game: [A, B],
+    });
+
+    const later = scene({
+      cmm: null,
+      stubs: { sessionStorage: fakeSessionStorage(storage.store) },
+    });
+    assert.deepEqual(later.ns.manifest.scenes("live_game"), [A, B]);
+    assert.deepEqual(later.codes(), []);
+  });
+
+  it("keeps the persisted list when a mount saw no mods", () => {
+    const storage = fakeSessionStorage({
+      gw_server_mods_scenes: JSON.stringify({ live_game: [A] }),
+    });
+    const fixture = scene({
+      cmmOptions: { serverMods: [] },
+      stubs: { sessionStorage: storage },
+    });
+
+    assert.deepEqual(fixture.ns.manifest.rememberScenes([]), null);
+    assert.deepEqual(JSON.parse(storage.store.gw_server_mods_scenes), {
+      live_game: [A],
+    });
+    assert.deepEqual(fixture.ns.manifest.scenes("live_game"), [A]);
+  });
+
+  it("copes with storage that cannot be written or parsed", () => {
+    const refusing = scene({
+      stubs: {
+        sessionStorage: fakeSessionStorage({}, { setItemThrows: true }),
+      },
+    });
+    refusing.ns.manifest.rememberScenes([{ scenes: { live_game: [A] } }]);
+    assert.equal(
+      refusing.console.lines.log.includes(
+        "[GW-SM] server mod scene list not persisted"
+      ),
+      true
+    );
+
+    const garbled = scene({
+      cmm: null,
+      stubs: {
+        sessionStorage: fakeSessionStorage({ gw_server_mods_scenes: "{" }),
+      },
+    });
+    assert.deepEqual(garbled.ns.manifest.scenes("live_game"), []);
   });
 });

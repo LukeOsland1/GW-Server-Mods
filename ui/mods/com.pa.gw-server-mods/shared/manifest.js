@@ -45,6 +45,83 @@
     );
   }
 
+  // Community Mods is absent from gw_start, so there its own store is read
+  // through the stock `db` extender. Read only, never written: the extender
+  // writes back on change and creates the record when the key is missing.
+  // See design.md.
+  var installed = null;
+  var loading = null;
+
+  function readInstalledMods() {
+    var deferred = $.Deferred();
+
+    if (
+      typeof ko === "undefined" ||
+      !root.localStorage ||
+      !root.localStorage.installedModsDB
+    ) {
+      deferred.resolve([]);
+      return deferred.promise();
+    }
+
+    var store = ko.observableArray([]).extend({
+      db: { local_name: "installedModsDB", db_name: "installed_mods" },
+    });
+
+    $.when(store.ready).always(function (mods) {
+      deferred.resolve(_.isArray(mods) ? mods : []);
+    });
+
+    return deferred.promise();
+  }
+
+  function load() {
+    if (available() || installed) {
+      return $.Deferred().resolve(true).promise();
+    }
+
+    if (loading) {
+      return loading;
+    }
+
+    loading = readInstalledMods().then(function (mods) {
+      installed = _.filter(mods, function (mod) {
+        return mod && mod.enabled;
+      });
+      loading = null;
+      ns.log("installed mods read without Community Mods", {
+        count: installed.length,
+      });
+      return true;
+    });
+
+    return loading;
+  }
+
+  function listed() {
+    return available() || !!installed;
+  }
+
+  // The mount order Community Mods uses: priority descending.
+  function fallbackServerMods() {
+    return _.sortByOrder(
+      _.filter(installed, function (mod) {
+        return mod.context === "server";
+      }),
+      "priority",
+      "desc"
+    );
+  }
+
+  function fallbackClientMods() {
+    return _.sortBy(
+      _.filter(installed, function (mod) {
+        return mod.context === "client";
+      }),
+      "priority"
+    );
+  }
+
   function describe(mod) {
     var identifier = normalizeIdentifier(mod && mod.identifier);
 
@@ -60,32 +137,57 @@
       installedPath: mod && mod.installedPath,
       fileSystem: !!(mod && mod.fileSystem),
       galacticWarMod: !!(mod && mod.galacticWarMod === true),
+      scenes: _.isPlainObject(mod && mod.scenes) ? mod.scenes : {},
     };
   }
 
   function activeServerMods() {
-    if (!available()) {
+    if (!listed()) {
       ns.alarm("cmm_unavailable", { where: "manifest.activeServerMods" });
       return [];
     }
 
-    var described = _.map(manager().activeServerModsToMount(), describe);
+    var records = available()
+      ? manager().activeServerModsToMount()
+      : fallbackServerMods();
+
+    var described = _.map(records, describe);
 
     return _.filter(described, function (mod) {
       return mod.identifier.length && mod.identifier !== GENERATED_SERVER_MOD;
     });
   }
 
+  function serverModInfo(identifier) {
+    var wanted = normalizeIdentifier(identifier);
+
+    return _.find(activeServerMods(), function (mod) {
+      return mod.identifier === wanted;
+    });
+  }
+
   // A faction splits its art: models in the server mod, textures in the client
   // mod it names in `companions`. See design.md.
   function pairedClientMods() {
-    if (!available() || !_.isFunction(manager().activeInstalledClientMods)) {
+    var records;
+    var clientRecords;
+
+    if (available()) {
+      if (!_.isFunction(manager().activeInstalledClientMods)) {
+        return [];
+      }
+      records = manager().activeServerModsToMount();
+      clientRecords = manager().activeInstalledClientMods();
+    } else if (installed) {
+      records = fallbackServerMods();
+      clientRecords = fallbackClientMods();
+    } else {
       return [];
     }
 
     var wanted = [];
 
-    _.forEach(manager().activeServerModsToMount(), function (mod) {
+    _.forEach(records, function (mod) {
       if (_.isArray(mod.companions)) {
         wanted = _.union(wanted, _.map(mod.companions, normalizeIdentifier));
       }
@@ -97,12 +199,9 @@
 
     // Folder-installed mods are excluded from activeClientZipMods, and a
     // companion is just as likely to be one.
-    var paired = _.filter(
-      _.map(manager().activeInstalledClientMods(), describe),
-      function (mod) {
-        return _.contains(wanted, mod.identifier);
-      }
-    );
+    var paired = _.filter(_.map(clientRecords, describe), function (mod) {
+      return _.contains(wanted, mod.identifier);
+    });
 
     if (paired.length !== wanted.length) {
       ns.log("companion client mods not all active", {
@@ -220,6 +319,61 @@
     return _.keys(loadRelevance()).length > 0;
   }
 
+  // The scene scripts the active server mods declare, keyed by scene, as
+  // Community Mods' activeServerModScenes builds them for a skirmish. Persisted
+  // like the classification: the battle scenes have no Community Mods and no
+  // store of their own to ask. See design.md.
+  var SCENES_KEY = "gw_server_mods_scenes";
+  var scenesCache = null;
+
+  function unionScenes(mods) {
+    var scenes = {};
+
+    _.forEach(mods, function (mod) {
+      _.forEach(mod.scenes, function (urls, scene) {
+        if (_.isArray(urls)) {
+          scenes[scene] = _.union(scenes[scene] || [], urls);
+        }
+      });
+    });
+
+    return scenes;
+  }
+
+  // An empty list is not evidence: connect_to_game mounts before Community
+  // Mods has read its store, and that run must not erase what gw_play wrote.
+  function rememberScenes(mods) {
+    if (!mods || !mods.length) {
+      return scenesCache;
+    }
+
+    scenesCache = unionScenes(mods);
+
+    try {
+      sessionStorage.setItem(SCENES_KEY, JSON.stringify(scenesCache));
+    } catch (e) {
+      ns.log("server mod scene list not persisted");
+    }
+
+    return scenesCache;
+  }
+
+  function scenes(scene) {
+    var active = listed() ? activeServerMods() : [];
+
+    if (active.length) {
+      scenesCache = unionScenes(active);
+    } else if (!scenesCache) {
+      try {
+        scenesCache = JSON.parse(sessionStorage.getItem(SCENES_KEY) || "{}");
+      } catch (e) {
+        scenesCache = {};
+      }
+    }
+
+    return _.isUndefined(scene) ? scenesCache : scenesCache[scene] || [];
+  }
+
   function identifiers() {
     return _.map(activeServerMods(), function (mod) {
       return mod.identifier;
@@ -234,7 +388,12 @@
 
   ns.manifest = {
     available: available,
+    load: load,
+    listed: listed,
     activeServerMods: activeServerMods,
+    serverModInfo: serverModInfo,
+    scenes: scenes,
+    rememberScenes: rememberScenes,
     modRoot: modRoot,
     pairedClientMods: pairedClientMods,
     detectClientRelevance: detectClientRelevance,

@@ -254,43 +254,41 @@
     return deferred.promise();
   }
 
-  // Repeatable: Galactic War tears the mounts down more than once per battle.
-  // remountContent is false only for a running battle, where it blanks the scene.
-  function runOnce(options) {
-    var withContent = !options || options.remountContent !== false;
-    var deferred = $.Deferred();
+  function settle(ok, mods) {
+    state = {
+      mounted: ok,
+      at: Date.now(),
+      mods: mods,
+      sequence: state.sequence + 1,
+    };
 
-    if (!ns.manifest.available()) {
-      deferred.resolve(false);
-      return deferred.promise();
-    }
+    ns.log("mounted server mods", { ok: ok, count: mods.length });
+  }
 
-    if (!zipMountAvailable()) {
-      ns.alarm("cmm_unavailable", { where: "api.file.zip.mount" });
-      deferred.resolve(false);
-      return deferred.promise();
-    }
+  // gw_start has no Community Mods and no battle to prepare: only the root
+  // mounts, so the mods' specs and images are readable there. See design.md.
+  function mountRootOnly(mods, withContent, deferred) {
+    var rootMounts = _.map(
+      mods.concat(ns.manifest.pairedClientMods()),
+      mountAtRoot
+    );
 
-    var mods = ns.manifest.activeServerMods();
+    $.when.apply($, rootMounts).always(function () {
+      var ok = !_.contains(_.toArray(arguments), false);
 
-    if (!mods.length) {
-      state = {
-        mounted: true,
-        at: Date.now(),
-        mods: [],
-        sequence: state.sequence + 1,
-      };
-      deferred.resolve(true);
-      return deferred.promise();
-    }
+      $.when(withContent ? remountContent() : null).always(function () {
+        settle(ok, mods);
+        deferred.resolve(ok);
+      });
+    });
+  }
 
+  function mountForBattle(mods, withContent, deferred) {
     report("!LOC:Mounting server mods");
 
     var rootMounts = _.map(
       mods.concat(ns.manifest.pairedClientMods()),
-      function (mod) {
-        return mountAtRoot(mod);
-      }
+      mountAtRoot
     );
 
     $.when.apply($, rootMounts).always(function () {
@@ -307,22 +305,48 @@
           reportUnmountableMods();
 
           verify(mods).then(function (ok) {
-            state = {
-              mounted: ok,
-              at: Date.now(),
-              mods: mods,
-              sequence: state.sequence + 1,
-            };
-
-            ns.log("mounted server mods", {
-              ok: ok,
-              count: mods.length,
-            });
-
+            settle(ok, mods);
             deferred.resolve(ok);
           });
         });
       });
+    });
+  }
+
+  // Repeatable: Galactic War tears the mounts down more than once per battle.
+  // remountContent is false only for a running battle, where it blanks the scene.
+  function runOnce(options) {
+    var withContent = !options || options.remountContent !== false;
+    var rootOnly = !!(options && options.rootOnly);
+    var deferred = $.Deferred();
+
+    if (!rootOnly && !ns.manifest.available()) {
+      deferred.resolve(false);
+      return deferred.promise();
+    }
+
+    if (!zipMountAvailable()) {
+      ns.alarm("cmm_unavailable", { where: "api.file.zip.mount" });
+      deferred.resolve(false);
+      return deferred.promise();
+    }
+
+    ns.manifest.load().then(function () {
+      var mods = ns.manifest.activeServerMods();
+
+      ns.manifest.rememberScenes(mods);
+
+      if (!mods.length) {
+        settle(true, []);
+        deferred.resolve(true);
+        return;
+      }
+
+      if (rootOnly) {
+        mountRootOnly(mods, withContent, deferred);
+      } else {
+        mountForBattle(mods, withContent, deferred);
+      }
     });
 
     return deferred.promise();

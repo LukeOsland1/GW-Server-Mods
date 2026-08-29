@@ -471,3 +471,106 @@ describe("mount module", () => {
     assert.equal(ctx.GwServerMods.mount, first);
   });
 });
+
+describe("mount.run rootOnly", () => {
+  function fakeKo(records) {
+    return {
+      observableArray: () => {
+        const store = () => records;
+        store.extend = () => {
+          store.ready = resolved(records);
+          return store;
+        };
+        return store;
+      },
+    };
+  }
+
+  function startScene(records, options) {
+    return scene(
+      Object.assign(
+        {
+          cmm: null,
+          stubs: {
+            ko: fakeKo(records),
+            localStorage: { installedModsDB: "1" },
+          },
+        },
+        options
+      )
+    );
+  }
+
+  it("mounts the enabled server zips and their companions at the root without Community Mods", () => {
+    const fixture = startScene([
+      mod({
+        identifier: "com.faction",
+        context: "server",
+        enabled: true,
+        companions: ["com.faction-client"],
+        scenes: { live_game: ["coui://ui/mods/com.faction/live_game.js"] },
+      }),
+      mod({
+        identifier: "com.faction-client",
+        context: "client",
+        enabled: true,
+        installedPath: "/download/com.faction-client.zip",
+      }),
+    ]);
+    const storage = fixture.ctx.sessionStorage;
+
+    assert.equal(run(fixture, { rootOnly: true }), true);
+
+    assert.deepEqual(fixture.api.calls.zipMount, [
+      ["/download/com.example.server.zip", "/", false],
+      ["/download/com.faction-client.zip", "/", false],
+    ]);
+    assert.equal(fixture.api.calls.remount.length, 1);
+    assert.deepEqual(fixture.api.calls.mountMemoryFiles, []);
+    assert.deepEqual(fixture.$.ajaxCalls, []);
+    assert.deepEqual(JSON.parse(storage.store.gw_server_mods_scenes), {
+      live_game: ["coui://ui/mods/com.faction/live_game.js"],
+    });
+    assert.deepEqual(fixture.codes(), []);
+    const state = fixture.ns.mount.state();
+    assert.equal(state.mounted, true);
+    assert.equal(state.mods[0].identifier, "com.faction");
+  });
+
+  it("counts a failed root mount against the run", () => {
+    const fixture = startScene([mod({ context: "server", enabled: true })], {
+      apiOptions: { zipMount: () => resolved(false) },
+    });
+
+    assert.equal(run(fixture, { rootOnly: true }), false);
+    assert.equal(fixture.alarm("mount_failed").length, 1);
+  });
+
+  it("settles as mounted with nothing to mount", () => {
+    const fixture = startScene([]);
+
+    assert.equal(run(fixture, { rootOnly: true }), true);
+    assert.deepEqual(fixture.ns.mount.state().mods, []);
+  });
+
+  it("still refuses a battle mount without Community Mods", () => {
+    const fixture = startScene([mod({ context: "server", enabled: true })]);
+
+    assert.equal(run(fixture), false);
+    assert.equal(fixture.ns.mount.sequence(), 0);
+  });
+
+  it("records the scene lists on a battle mount", () => {
+    const fixture = scene({
+      cmmOptions: {
+        serverMods: [mod({ scenes: { live_game: ["coui://ui/mods/x.js"] } })],
+      },
+    });
+
+    assert.equal(run(fixture), true);
+    assert.deepEqual(
+      JSON.parse(fixture.ctx.sessionStorage.store.gw_server_mods_scenes),
+      { live_game: ["coui://ui/mods/x.js"] }
+    );
+  });
+});

@@ -47,13 +47,29 @@ describe("modinfo scenes", () => {
   });
 
   it("load the shared modules first, in dependency order", () => {
-    const expected = SHARED.map((file) => path.join(MOD_ROOT, file));
+    const order = SHARED.concat(["shared/server_ui.js"]).map((file) =>
+      path.join(MOD_ROOT, file)
+    );
+    const required = SHARED.slice(0, 2).map((file) =>
+      path.join(MOD_ROOT, file)
+    );
 
     for (const scene of scenes.filter((name) => name !== "icon_atlas")) {
       const files = sceneFiles(scene).map(couiToFsPath);
-      assert.deepEqual(files.slice(0, expected.length), expected, scene);
-      for (const own of files.slice(expected.length)) {
-        assert.equal(path.dirname(own), path.join(MOD_ROOT, scene), own);
+      const shared = files.filter((file) => order.includes(file));
+      const own = files.filter((file) => !order.includes(file));
+
+      assert.deepEqual(files.slice(0, shared.length), shared, scene);
+      assert.deepEqual(
+        shared,
+        order.filter((file) => shared.includes(file)),
+        scene
+      );
+      for (const file of required) {
+        assert.equal(shared.includes(file), true, scene + " " + file);
+      }
+      for (const file of own) {
+        assert.equal(path.dirname(file), path.join(MOD_ROOT, scene), file);
       }
     }
   });

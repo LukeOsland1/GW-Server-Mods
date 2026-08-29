@@ -15,18 +15,28 @@ const {
   loadScene,
 } = require("../scripts/lib/scene-loader.js");
 
+const BUILD = "coui://ui/mods/com.example/shared_build.js";
+const LIVE = "coui://ui/mods/com.example/live_game.js";
+
 describe("live_game remount", () => {
-  it("installs the hooks and mounts without content registration", () => {
+  it("installs the hooks, mounts without content registration and loads the server mod UI", () => {
+    const loads = [];
     const fixture = sharedScene({
-      cmmOptions: { serverMods: [mod()] },
+      cmmOptions: {
+        serverMods: [
+          mod({ scenes: { shared_build: [BUILD], live_game: [LIVE] } }),
+        ],
+      },
       ajax: (url) =>
         url.endsWith("unit_list.json") ? JSON.stringify({ units: [] }) : "",
     });
 
+    fixture.ctx.loadMods = (list) => loads.push(list);
     loadScene(fixture.ctx, "live_game");
 
     assert.equal(fixture.ns.mount.sequence(), 1);
     assert.equal(fixture.api.calls.remount.length, 0);
+    assert.deepEqual(loads, [[BUILD], [LIVE]]);
 
     const runs = [];
     fixture.ns.mount.run = (options) => {

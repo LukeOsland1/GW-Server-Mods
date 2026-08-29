@@ -110,6 +110,24 @@ costs nothing.
 Folder-installed **client** mods are unaffected - `client_mods/` folders do reach the root,
 confirmed against a companion supplying textures from one.
 
+### Before a war exists
+
+`gw_start` has no Community Mods, so `manifest.js` reads the manager's own store there
+through the stock `db` extender (`installedModsDB` / `installed_mods`), read-only: the
+extender writes back on change and creates the record when the key is missing, so the
+observable is never written and the read is skipped when the key is absent.
+`manifest.load()` performs that read once; with Community Mods present it resolves at
+once, and `activeServerMods()` answers from whichever source is there.
+
+`mount.run({ rootOnly: true })` is what `gw_start/mount.js` asks for: the root mounts and
+the content remount, nothing else. There is no `/server_mods/` mount because there is no
+manager to make it and no server to read it, no unit-list merge because no referee runs
+here, and no probe of `mods.json` because it does not exist. Its purpose is to let a
+Galactic War mod show a server mod's commanders — specs and portraits — before the war is
+created. A battle mount still refuses to run without Community Mods, since the `rootOnly`
+path is the only one the fallback listing is fit for: re-mounting the merged unit list
+under a running battle would replace the referee's cooked one.
+
 ## Keeping the mounts
 
 Community Mods' `remountClientMods()` calls `unmountAllMemoryFiles`, which drops the root
@@ -187,10 +205,48 @@ before this scene runs. Listing is async and the scene sends its list as soon as
 returns, so `sendIconList` is wrapped rather than raced - the scene's own call triggers
 the enumeration and the list goes out once, complete.
 
-Two known limits. This duplicates Legion's own mechanism rather than restoring it; the
-better fix is to make Galactic War load `ui_mod_list_for_server.js`. And the atlas grows
-from 132 to 274 names with one faction loaded; PA's atlas texture limit is unknown, and an
-overflow would show up as _other_ icons breaking rather than the modded ones.
+Two known limits. The atlas is built before any mount exists, so this scene cannot use
+the server mods' own `icon_atlas` scripts the way the battle scenes below use theirs, and
+enumerates the directory instead. And the atlas grows from 132 to 274 names with one
+faction loaded; PA's atlas texture limit is unknown, and an overflow would show up as
+_other_ icons breaking rather than the modded ones.
+
+## Server mod scene scripts
+
+A server mod's `modinfo.json` may declare `scenes` like a client mod's — Legion's build
+bar tabs, Bugs' research mechanic, Exiles' automatic extractor fire all live there. In a
+skirmish they load because Community Mods writes the union of every active server mod's
+`scenes` into the server zip's `ui/mods/ui_mod_list.js`
+(`community-mods-manager.js`, `activeServerModsUImodList`), which the engine loads when
+server mods are mounted at UI load. Galactic War never mounts them at that point, so
+those scripts never load and the mechanics they carry are silently absent.
+
+`shared/server_ui.js` loads them from the scene scripts instead. `loadMods` is the
+game's own loader, a global in every scene, and `loadScript` behind it is a synchronous
+XHR — so a call from this mod's scene script runs to completion before the scene binds,
+at the same point in the page's life the engine would have loaded them. The list comes
+from `manifest.scenes(scene)`: the union of the active server mods' `scenes`, computed
+where Community Mods is present and persisted to `sessionStorage` by every mount, because
+`live_game` and its panels have neither the manager nor a store to ask. Each URL loads
+once per page, and a URL the scene or the global list already carries is skipped, which
+is what keeps a skirmish — where the engine did load them — from loading them twice.
+
+A mount that lists no mods does not touch the persisted list. `connect_to_game` mounts
+as its scene loads, before Community Mods has read its store, and that run sees nothing
+— measured live: `mounted server mods {"ok":true,"count":0}` two seconds before
+`community mods ready`. Written through, it erased the list `gw_play` had persisted and
+every battle scene loaded nothing. Should the list be missing anyway, `serverUi.load`
+reads the store itself and loads late, after the scene has bound.
+
+Where it runs: `live_game` (`remount.js`, which also loads the `shared_build` share,
+because `build.js` consumed that list before any scene script ran),
+`live_game_build_bar` and `live_game_players`. The main menu is not covered: a server
+mod's `start` scripts are not loaded in a skirmish either.
+
+The scripts were written for a skirmish. `model.gameModIdentifiers` and the lobby are
+absent from a Galactic War battle, so each mod's scripts are a thing to smoke-test rather
+than assume; a script that throws takes only itself out, since `loadScript` runs each
+file separately.
 
 ## The co-op guard
 
@@ -309,3 +365,9 @@ faked; whether the engine behaves as faked is verified by loading the game.
    Then set `"galacticWarMod": true` on that mod and repeat: the viewer must be blocked.
 6. Host and viewer on different versions of the same mod â€” version mismatch.
 7. A second, unrelated server mod, to confirm nothing is specific to one mod.
+8. `gw_start` with a faction server mod enabled — `GwServerMods.mount.state().mounted` is
+   true and `coui:/` resolves one of its commander specs, with no Community Mods on the
+   page.
+9. A Galactic War battle with Legion, Bugs and Exiles — Legion's build bar tabs and
+   hotkeys, a Bugs research station unlocking a unit, an Exiles extractor firing on its
+   own; then the same in a skirmish, where each must still load exactly once.
