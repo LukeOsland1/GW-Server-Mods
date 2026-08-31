@@ -121,13 +121,14 @@ once, and `activeServerMods()` answers from whichever source is there.
 
 `mount.run({ rootOnly: true, remountContent: false })` is what `gw_start/mount.js` asks
 for: the root mounts, nothing else - the scene reads specs and portraits through `coui:`,
-which the zip mounts alone serve, and the content remount freezes the UI for seconds. There is no `/server_mods/` mount because there is no
-manager to make it and no server to read it, no unit-list merge because no referee runs
-here, and no probe of `mods.json` because it does not exist. Its purpose is to let a
-Galactic War mod show a server mod's commanders — specs and portraits — before the war is
-created. A battle mount still refuses to run without Community Mods, since the `rootOnly`
-path is the only one the fallback listing is fit for: re-mounting the merged unit list
-under a running battle would replace the referee's cooked one.
+which the zip mounts alone serve, and the content remount freezes the UI for seconds.
+There is no `/server_mods/` mount because there is no manager to make it and no server to
+read it, no unit-list merge because no referee runs here, and no probe of `mods.json`
+because it does not exist. Its purpose is to let a Galactic War mod show a server mod's
+commanders — specs and portraits — before the war is created. A battle mount still refuses
+to run without Community Mods, since the `rootOnly` path is the only one the fallback
+listing is fit for: re-mounting the merged unit list under a running battle would replace
+the referee's cooked one.
 
 ## Keeping the mounts
 
