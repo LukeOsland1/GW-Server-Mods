@@ -37,8 +37,9 @@ function scene(options) {
 }
 
 describe("launch installation", () => {
-  it("installs the hooks, mounts at once and patches fight", () => {
+  it("installs the hooks, mounts at once and patches fight", async () => {
     const fixture = scene();
+    await flush();
 
     assert.equal(
       fixture.api.file.unmountAllMemoryFiles.__gwServerModsWrapped,
@@ -55,8 +56,9 @@ describe("launch installation", () => {
 
   // The remount blanks the scene for seconds, and nothing on the galaxy map
   // goes through the renderer's content catalogue.
-  it("mounts without remounting the content", () => {
+  it("mounts without remounting the content", async () => {
     const fixture = scene({ cmmOptions: { serverMods: [mod()] } });
+    await flush();
 
     assert.equal(fixture.api.calls.zipMount.length, 1);
     assert.equal(fixture.api.calls.remount.length, 0);

@@ -5,10 +5,9 @@
 // recorded on `api.calls`. An option handler may return a plain value, a Deferred
 // or a native promise; undefined resolves.
 //
-// A member marked "engine" returns an *engine* promise, as the game's does:
-// `then` and nothing jQuery recognises. A shipped file that hands one to $.when
-// therefore fails a test instead of silently skipping the wait. The unmarked
-// members are the ones whose consumer has not been converted yet.
+// A call returns an *engine* promise, as the game's does: `then` and nothing
+// jQuery recognises. A shipped file that hands one to $.when therefore fails a
+// test instead of silently skipping the wait.
 
 const { enginePromise, isThenable, resolved } = require("./fake-jquery.js");
 
@@ -38,22 +37,21 @@ function createFakeApi(options) {
     startGame: [],
   };
 
-  function record(name, handler, fallback, shape) {
+  function record(name, handler, fallback) {
     return function () {
       const args = Array.prototype.slice.call(arguments);
       calls[name].push(args);
-      const result = handler ? handler.apply(null, args) : fallback;
-      if (shape !== "engine") {
-        return result === undefined ? resolved() : result;
-      }
-      return asEngine(result);
+
+      return asEngine(handler ? handler.apply(null, args) : fallback);
     };
   }
 
   const api = { calls: calls, file: {}, content: {}, net: {} };
 
   if (opts.zipMount !== false) {
-    api.file.zip = { mount: record("zipMount", opts.zipMount, resolved(true)) };
+    api.file.zip = {
+      mount: record("zipMount", opts.zipMount, resolved(true)),
+    };
   }
   if (opts.list !== false) {
     api.file.list = record("list", opts.list, resolved([]));
@@ -67,9 +65,7 @@ function createFakeApi(options) {
   if (opts.unmountAllMemoryFiles !== false) {
     api.file.unmountAllMemoryFiles = record(
       "unmountAllMemoryFiles",
-      opts.unmountAllMemoryFiles,
-      undefined,
-      "engine"
+      opts.unmountAllMemoryFiles
     );
   }
   if (opts.remount !== false) {
@@ -79,8 +75,7 @@ function createFakeApi(options) {
     api.net.startGame = record(
       "startGame",
       opts.startGame,
-      resolved("started"),
-      "engine"
+      resolved("started")
     );
   }
 

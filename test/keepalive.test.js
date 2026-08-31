@@ -9,12 +9,13 @@ const { sharedScene } = require("../scripts/lib/shared-scene.js");
 const { mod } = require("../scripts/lib/fake-cmm.js");
 const {
   createContext,
+  flush,
   loadFile,
   loadScene,
 } = require("../scripts/lib/scene-loader.js");
 
 describe("gw_lobby keepalive", () => {
-  it("installs the hooks and mounts with content registration", () => {
+  it("installs the hooks and mounts with content registration", async () => {
     const fixture = sharedScene({
       cmmOptions: { serverMods: [mod()] },
       ajax: (url) =>
@@ -22,6 +23,7 @@ describe("gw_lobby keepalive", () => {
     });
 
     loadScene(fixture.ctx, "gw_lobby");
+    await flush();
 
     assert.equal(
       fixture.api.file.unmountAllMemoryFiles.__gwServerModsWrapped,

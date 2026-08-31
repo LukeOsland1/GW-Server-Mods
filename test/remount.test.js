@@ -34,6 +34,7 @@ describe("live_game remount", () => {
 
     fixture.ctx.loadMods = (list) => loads.push(list);
     loadScene(fixture.ctx, "live_game");
+    await flush();
 
     assert.equal(fixture.ns.mount.sequence(), 1);
     assert.equal(fixture.api.calls.remount.length, 0);

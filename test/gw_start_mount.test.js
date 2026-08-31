@@ -11,6 +11,7 @@ const { mod } = require("../scripts/lib/fake-cmm.js");
 const { resolved } = require("../scripts/lib/fake-jquery.js");
 const {
   createContext,
+  flush,
   loadFile,
   loadScene,
 } = require("../scripts/lib/scene-loader.js");
@@ -29,7 +30,7 @@ function fakeKo(records) {
 }
 
 describe("gw_start mount", () => {
-  it("mounts the enabled server zips at the root from the store", () => {
+  it("mounts the enabled server zips at the root from the store", async () => {
     const fixture = sharedScene({
       cmm: null,
       files: [],
@@ -40,6 +41,7 @@ describe("gw_start mount", () => {
     });
 
     loadScene(fixture.ctx, "gw_start");
+    await flush();
     const ns = fixture.ctx.GwServerMods;
 
     assert.deepEqual(fixture.api.calls.zipMount, [

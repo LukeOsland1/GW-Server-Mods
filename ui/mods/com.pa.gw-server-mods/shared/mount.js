@@ -16,47 +16,45 @@
   var running = null;
   var runningWithContent = false;
 
+  // A read that failed is a read that found nothing; nothing here treats the
+  // two differently, and none of these may reject.
+  function nothing() {
+    return null;
+  }
+
   function zipMountAvailable() {
     return !!(api.file && api.file.zip && _.isFunction(api.file.zip.mount));
   }
 
   function mountAtRoot(mod) {
-    var deferred = $.Deferred();
-
     // Nothing can mount a folder at the root: zip.mount rejects one and there is
     // no directory equivalent. Whether that matters is decided once the mod has
     // been classified, in reportUnmountableMods.
     if (mod.fileSystem) {
-      deferred.resolve(true);
-      return deferred.promise();
+      return Promise.resolve(true);
     }
 
     if (!_.isString(mod.installedPath) || !mod.installedPath.length) {
       ns.alarm("zip_missing", { identifier: mod.identifier });
-      deferred.resolve(false);
-      return deferred.promise();
+      return Promise.resolve(false);
     }
 
-    api.file.zip.mount(mod.installedPath, "/", false).then(
-      function (ok) {
-        if (!ok) {
-          ns.alarm("mount_failed", {
-            identifier: mod.identifier,
-            path: mod.installedPath,
-          });
-        }
-        deferred.resolve(!!ok);
-      },
-      function () {
-        ns.alarm("mount_failed", {
-          identifier: mod.identifier,
-          path: mod.installedPath,
-        });
-        deferred.resolve(false);
-      }
-    );
+    function failed() {
+      ns.alarm("mount_failed", {
+        identifier: mod.identifier,
+        path: mod.installedPath,
+      });
 
-    return deferred.promise();
+      return false;
+    }
+
+    // One mod that will not mount must not fail the run, so both outcomes
+    // resolve and the caller reads the answer rather than a rejection.
+    return Promise.resolve(
+      api.file.zip.mount(mod.installedPath, "/", false)
+    ).then(function (ok) {
+      return ok ? true : failed();
+    }, failed);
   }
 
   // spec:// rejects a query string, so cache-busting it returns 404.
@@ -64,36 +62,32 @@
   function remountContent() {
     if (!api.content || !_.isFunction(api.content.remount)) {
       ns.alarm("content_remount_unavailable", {});
-      return $.Deferred().resolve().promise();
+      return Promise.resolve();
     }
 
-    return api.content.remount();
+    return Promise.resolve(api.content.remount());
   }
 
   function readUnitList(url) {
-    var deferred = $.Deferred();
-
-    $.ajax({ url: url, dataType: "text", cache: url.indexOf("coui://") !== 0 })
-      .done(function (data) {
-        var parsed = data;
-
-        if (_.isString(data)) {
-          try {
-            parsed = JSON.parse(data);
-          } catch (e) {
-            parsed = null;
-          }
-        }
-
-        deferred.resolve(
-          parsed && _.isArray(parsed.units) ? parsed.units : null
-        );
+    return Promise.resolve(
+      $.ajax({
+        url: url,
+        dataType: "text",
+        cache: url.indexOf("coui://") !== 0,
       })
-      .fail(function () {
-        deferred.resolve(null);
-      });
+    ).then(function (data) {
+      var parsed = data;
 
-    return deferred.promise();
+      if (_.isString(data)) {
+        try {
+          parsed = JSON.parse(data);
+        } catch (e) {
+          parsed = null;
+        }
+      }
+
+      return parsed && _.isArray(parsed.units) ? parsed.units : null;
+    }, nothing);
   }
 
   // The base game's own unit list, captured before anything shadows it.
@@ -131,7 +125,7 @@
   // in one faction combination, and must never cost a battle.
   function captureVanillaUnits() {
     if (loadVanillaUnits()) {
-      return $.Deferred().resolve(vanillaUnits).promise();
+      return Promise.resolve(vanillaUnits);
     }
 
     return readUnitList("coui://pa/units/unit_list.json").then(
@@ -168,7 +162,6 @@
   // Every faction ships its own unit_list.json and the root mounts shadow each
   // other, so the referee would only see the last one. See design.md.
   function mergeUnitList(mods) {
-    var deferred = $.Deferred();
     var mgr = CommunityModsManager;
 
     if (
@@ -176,8 +169,7 @@
       mgr.mergeUnitServerMods() === false
     ) {
       ns.log("unit list merge disabled by Community Mods");
-      deferred.resolve();
-      return deferred.promise();
+      return Promise.resolve();
     }
 
     // Every read is through coui://, never spec://: the engine caches a spec://
@@ -185,7 +177,7 @@
     // spec://, so a spec:// read here would pin the unmerged list for the whole
     // process. The base list comes from captureVanillaUnits rather than a read
     // taken now, which the root mounts would shadow. See design.md.
-    var reads = [$.Deferred().resolve(loadVanillaUnits()).promise()].concat(
+    var reads = [Promise.resolve(loadVanillaUnits())].concat(
       _.map(
         _.filter(mods, function (mod) {
           return !mod.fileSystem;
@@ -198,13 +190,11 @@
       )
     );
 
-    $.when.apply($, reads).then(function () {
-      var lists = _.toArray(arguments);
+    return ns.settled(reads).then(function (lists) {
       var modLists = _.filter(lists.slice(1), _.isArray);
 
       if (!modLists.length) {
-        deferred.resolve();
-        return;
+        return undefined;
       }
 
       var merged = _.union.apply(_, [lists[0] || []].concat(modLists));
@@ -212,27 +202,22 @@
 
       if (!api.file || !_.isFunction(api.file.mountMemoryFiles)) {
         reportUnmerged(detail, "mountMemoryFiles unavailable");
-        deferred.resolve();
-        return;
+        return undefined;
       }
 
-      $.when(
+      return Promise.resolve(
         api.file.mountMemoryFiles({
           "/pa/units/unit_list.json": JSON.stringify({ units: merged }),
         })
       ).then(
         function () {
           ns.log("merged unit list", detail);
-          deferred.resolve();
         },
         function (error) {
           reportUnmerged(detail, String(error));
-          deferred.resolve();
         }
       );
     });
-
-    return deferred.promise();
   }
 
   // GWO's battle-preparation screen, when present. Resolved at call time:
@@ -253,18 +238,18 @@
   }
 
   function probe(path) {
-    var deferred = $.Deferred();
     var bustable = path.indexOf("coui://") === 0;
 
-    $.ajax({ url: path, dataType: "text", cache: !bustable })
-      .done(function () {
-        deferred.resolve(true);
-      })
-      .fail(function () {
-        deferred.resolve(false);
-      });
-
-    return deferred.promise();
+    return Promise.resolve(
+      $.ajax({ url: path, dataType: "text", cache: !bustable })
+    ).then(
+      function () {
+        return true;
+      },
+      function () {
+        return false;
+      }
+    );
   }
 
   // A folder-installed server mod the client has to render cannot be made
@@ -287,7 +272,6 @@
   }
 
   function verify(mods) {
-    var deferred = $.Deferred();
     var checks = [probe("coui://server_mods/mods.json")];
 
     _.forEach(mods, function (mod) {
@@ -297,8 +281,7 @@
     // The referee's own input.
     checks.push(probe("spec://pa/units/unit_list.json"));
 
-    $.when.apply($, checks).then(function () {
-      var results = _.toArray(arguments);
+    return ns.settled(checks).then(function (results) {
       var ok = !_.contains(results, false);
 
       if (!ok) {
@@ -309,10 +292,8 @@
         });
       }
 
-      deferred.resolve(ok);
+      return ok;
     });
-
-    return deferred.promise();
   }
 
   function settle(ok, mods) {
@@ -328,23 +309,28 @@
 
   // gw_start has no Community Mods and no battle to prepare: only the root
   // mounts, so the mods' specs and images are readable there. See design.md.
-  function mountRootOnly(mods, withContent, deferred) {
+  function mountRootOnly(mods, withContent) {
     var rootMounts = _.map(
       mods.concat(ns.manifest.pairedClientMods()),
       mountAtRoot
     );
+    var ok;
 
-    $.when.apply($, rootMounts).always(function () {
-      var ok = !_.contains(_.toArray(arguments), false);
+    return ns
+      .settled(rootMounts)
+      .then(function (results) {
+        ok = !_.contains(results, false);
 
-      $.when(withContent ? remountContent() : null).always(function () {
+        return ns.settled([withContent ? remountContent() : null]);
+      })
+      .then(function () {
         settle(ok, mods);
-        deferred.resolve(ok);
+
+        return ok;
       });
-    });
   }
 
-  function mountForBattle(mods, withContent, deferred) {
+  function mountForBattle(mods, withContent) {
     report("!LOC:Mounting server mods");
 
     var rootMounts = _.map(
@@ -352,26 +338,32 @@
       mountAtRoot
     );
 
-    $.when.apply($, rootMounts).always(function () {
-      $.when(CommunityModsManager.mountServerMods()).always(function () {
+    return ns
+      .settled(rootMounts)
+      .then(function () {
+        return ns.settled([CommunityModsManager.mountServerMods()]);
+      })
+      .then(function () {
         if (withContent) {
           report("!LOC:Registering server mod content");
         }
 
-        $.when(
+        return ns.settled([
           withContent ? remountContent() : null,
           mergeUnitList(mods),
-          ns.manifest.detectClientRelevance(mods)
-        ).always(function () {
-          reportUnmountableMods();
+          ns.manifest.detectClientRelevance(mods),
+        ]);
+      })
+      .then(function () {
+        reportUnmountableMods();
 
-          verify(mods).then(function (ok) {
-            settle(ok, mods);
-            deferred.resolve(ok);
-          });
-        });
+        return verify(mods);
+      })
+      .then(function (ok) {
+        settle(ok, mods);
+
+        return ok;
       });
-    });
   }
 
   // Repeatable: Galactic War tears the mounts down more than once per battle.
@@ -379,41 +371,34 @@
   function runOnce(options) {
     var withContent = !options || options.remountContent !== false;
     var rootOnly = !!(options && options.rootOnly);
-    var deferred = $.Deferred();
 
     if (!rootOnly && !ns.manifest.available()) {
-      deferred.resolve(false);
-      return deferred.promise();
+      return Promise.resolve(false);
     }
 
     if (!zipMountAvailable()) {
       ns.alarm("cmm_unavailable", { where: "api.file.zip.mount" });
-      deferred.resolve(false);
-      return deferred.promise();
+      return Promise.resolve(false);
     }
 
-    ns.manifest.load().then(function () {
+    return Promise.resolve(ns.manifest.load()).then(function () {
       var mods = ns.manifest.activeServerMods();
 
       ns.manifest.rememberScenes(mods);
 
       if (!mods.length) {
         settle(true, []);
-        deferred.resolve(true);
-        return;
+
+        return true;
       }
 
       // Before the first mountAtRoot, while the base list is still readable.
-      captureVanillaUnits().always(function () {
-        if (rootOnly) {
-          mountRootOnly(mods, withContent, deferred);
-        } else {
-          mountForBattle(mods, withContent, deferred);
-        }
+      return ns.settled([captureVanillaUnits()]).then(function () {
+        return rootOnly
+          ? mountRootOnly(mods, withContent)
+          : mountForBattle(mods, withContent);
       });
     });
-
-    return deferred.promise();
   }
 
   // A single unmount reaches here through two wrappers, and a full cycle costs
@@ -433,30 +418,26 @@
     var current;
 
     if (previous) {
-      var queued = $.Deferred();
-
-      previous.always(function () {
-        runOnce(options).always(function (ok) {
-          queued.resolve(ok);
-        });
+      current = ns.settled([previous]).then(function () {
+        return runOnce(options);
       });
-
-      current = queued.promise();
     } else {
       current = runOnce(options);
     }
 
-    // A run with nothing to mount settles at once, so the clear can fire
-    // before this function returns; neither the assignment nor the return
-    // may come after it. The queued run supersedes the one it waits on, so
-    // only the run still current may clear.
-    running = current;
-    runningWithContent = withContent;
-    current.always(function () {
+    // The queued run supersedes the one it waits on, so only the run still
+    // current may clear. Nothing can settle before this function returns - a
+    // native promise settles on a microtask - but the ordering is still the
+    // one to keep: two runs must not overlap their mounts.
+    function clear() {
       if (running === current) {
         running = null;
       }
-    });
+    }
+
+    running = current;
+    runningWithContent = withContent;
+    current.then(clear, clear);
 
     return current;
   }

@@ -10,11 +10,13 @@ const { sharedScene } = require("../scripts/lib/shared-scene.js");
 const { mod } = require("../scripts/lib/fake-cmm.js");
 const {
   Deferred,
+  enginePromise,
   rejected,
   resolved,
 } = require("../scripts/lib/fake-jquery.js");
 const {
   fakeSessionStorage,
+  flush,
   loadFile,
 } = require("../scripts/lib/scene-loader.js");
 
@@ -55,11 +57,7 @@ function scene(options) {
 }
 
 function run(fixture, options) {
-  let outcome;
-  fixture.ns.mount.run(options).then((ok) => {
-    outcome = ok;
-  });
-  return outcome;
+  return fixture.ns.mount.run(options);
 }
 
 function stages(fixture) {
@@ -69,27 +67,27 @@ function stages(fixture) {
 }
 
 describe("mount.run", () => {
-  it("resolves false without touching anything when Community Mods is absent", () => {
+  it("resolves false without touching anything when Community Mods is absent", async () => {
     const fixture = scene({ cmm: null });
 
-    assert.equal(run(fixture), false);
+    assert.equal(await run(fixture), false);
     assert.deepEqual(fixture.codes(), []);
     assert.equal(fixture.ns.mount.sequence(), 0);
   });
 
-  it("raises cmm_unavailable when zips cannot be mounted", () => {
+  it("raises cmm_unavailable when zips cannot be mounted", async () => {
     const fixture = scene({ apiOptions: { zipMount: false } });
 
-    assert.equal(run(fixture), false);
+    assert.equal(await run(fixture), false);
     assert.deepEqual(fixture.alarm("cmm_unavailable")[0].detail, {
       where: "api.file.zip.mount",
     });
   });
 
-  it("counts a run with no server mods as mounted", () => {
+  it("counts a run with no server mods as mounted", async () => {
     const fixture = scene({ cmmOptions: { serverMods: [] } });
 
-    assert.equal(run(fixture), true);
+    assert.equal(await run(fixture), true);
     const state = fixture.ns.mount.state();
     assert.equal(state.mounted, true);
     assert.deepEqual(state.mods, []);
@@ -98,11 +96,11 @@ describe("mount.run", () => {
     assert.equal(fixture.cmm.calls.mountServerMods, 0);
   });
 
-  it("mounts, registers, merges, classifies and verifies one zip mod", () => {
+  it("mounts, registers, merges, classifies and verifies one zip mod", async () => {
     const fixture = scene();
     const reported = stages(fixture);
 
-    assert.equal(run(fixture), true);
+    assert.equal(await run(fixture), true);
 
     assert.deepEqual(fixture.api.calls.zipMount, [
       ["/download/com.example.server.zip", "/", false],
@@ -143,7 +141,7 @@ describe("mount.run", () => {
     );
   });
 
-  it("root-mounts the paired client mods too", () => {
+  it("root-mounts the paired client mods too", async () => {
     const fixture = scene({
       cmmOptions: {
         serverMods: [mod({ companions: ["com.client"] })],
@@ -156,7 +154,7 @@ describe("mount.run", () => {
       },
     });
 
-    run(fixture);
+    await run(fixture);
 
     assert.deepEqual(
       fixture.api.calls.zipMount.map((call) => call[0]),
@@ -164,29 +162,87 @@ describe("mount.run", () => {
     );
   });
 
-  it("leaves the renderer alone during a battle", () => {
+  it("leaves the renderer alone during a battle", async () => {
     const fixture = scene();
     const reported = stages(fixture);
 
-    assert.equal(run(fixture, { remountContent: false }), true);
+    assert.equal(await run(fixture, { remountContent: false }), true);
 
     assert.equal(fixture.api.calls.remount.length, 0);
     assert.deepEqual(reported, ["!LOC:Mounting server mods"]);
   });
 
-  it("raises content_remount_unavailable when the engine cannot register content", () => {
+  // The bug this file's rewrite came from: api.content.remount() is an engine
+  // promise, and $.when read it as a plain value, so the mount reported itself
+  // complete while the engine was still registering models and textures.
+  it("does not report the mount complete until the content is registered", async () => {
+    const pending = enginePromise();
+    const fixture = scene({ apiOptions: { remount: () => pending } });
+    let outcome;
+
+    fixture.ns.mount.run().then((ok) => {
+      outcome = ok;
+    });
+    await flush();
+
+    assert.equal(fixture.api.calls.remount.length, 1);
+    assert.equal(outcome, undefined);
+    assert.equal(fixture.ns.mount.sequence(), 0);
+
+    pending.resolve();
+    await flush();
+
+    assert.equal(outcome, true);
+    assert.equal(fixture.ns.mount.sequence(), 1);
+  });
+
+  // Same fault, and this one loses units: the referee reads the merged list, so
+  // a run that settled before mountMemoryFiles finished could hand it the
+  // unmerged one.
+  it("does not report the mount complete until the merged list is mounted", async () => {
+    const pending = enginePromise();
+    const fixture = scene({ apiOptions: { mountMemoryFiles: () => pending } });
+    let outcome;
+
+    fixture.ns.mount.run().then((ok) => {
+      outcome = ok;
+    });
+    await flush();
+
+    assert.equal(fixture.api.calls.mountMemoryFiles.length, 1);
+    assert.equal(outcome, undefined);
+    assert.equal(
+      fixture.console.lines.log.some((line) =>
+        line.startsWith("[GW-SM] merged unit list")
+      ),
+      false
+    );
+
+    pending.resolve();
+    await flush();
+
+    assert.equal(outcome, true);
+    assert.equal(
+      fixture.console.lines.log.includes(
+        '[GW-SM] merged unit list {"units":2,"lists":1}'
+      ),
+      true
+    );
+  });
+
+  it("raises content_remount_unavailable when the engine cannot register content", async () => {
     const fixture = scene({ apiOptions: { remount: false } });
 
-    assert.equal(run(fixture), true);
+    assert.equal(await run(fixture), true);
     assert.deepEqual(fixture.codes(), ["content_remount_unavailable"]);
   });
 
-  it("raises zip_missing for an undownloaded zip and carries on", () => {
+  it("raises zip_missing for an undownloaded zip and carries on", async () => {
     const fixture = scene({
       cmmOptions: { serverMods: [mod({ installedPath: "" })] },
     });
 
-    assert.equal(run(fixture), true);
+    assert.equal(await run(fixture), true);
     assert.deepEqual(fixture.alarm("zip_missing")[0].detail, {
       identifier: "com.example.server",
     });
@@ -194,9 +250,9 @@ describe("mount.run", () => {
     assert.equal(fixture.cmm.calls.mountServerMods, 1);
   });
 
-  it("raises mount_failed when the zip mount refuses or throws", () => {
+  it("raises mount_failed when the zip mount refuses or throws", async () => {
     const refused = scene({ apiOptions: { zipMount: () => resolved(false) } });
-    run(refused);
+    await run(refused);
     assert.deepEqual(refused.alarm("mount_failed")[0].detail, {
       identifier: "com.example.server",
       path: "/download/com.example.server.zip",
@@ -205,18 +261,18 @@ describe("mount.run", () => {
     const thrown = scene({
       apiOptions: { zipMount: () => rejected("bad zip") },
     });
-    run(thrown);
+    await run(thrown);
     assert.equal(thrown.alarm("mount_failed").length, 1);
   });
 
-  it("does not mount a folder mod and raises filesystem_server_mod only when the client needs it", () => {
+  it("does not mount a folder mod and raises filesystem_server_mod only when the client needs it", async () => {
     const folder = mod({ fileSystem: true, installedPath: "/mods/folder/" });
     const relevant = scene({
       cmmOptions: { serverMods: [folder] },
       apiOptions: { list: () => resolved(["/mods/folder/pa/units/"]) },
     });
 
-    run(relevant);
+    await run(relevant);
 
     assert.equal(relevant.api.calls.zipMount.length, 0);
     assert.deepEqual(relevant.alarm("filesystem_server_mod")[0].detail, {
@@ -235,11 +291,11 @@ describe("mount.run", () => {
       cmmOptions: { serverMods: [folder] },
       apiOptions: { list: () => resolved(["/mods/folder/pa/ai/"]) },
     });
-    run(aiOnly);
+    await run(aiOnly);
     assert.deepEqual(aiOnly.codes(), []);
   });
 
-  it("raises probe_failed and reports not mounted when a file cannot be read back", () => {
+  it("raises probe_failed and reports not mounted when a file cannot be read back", async () => {
     const fixture = scene({
       ajax: (url) => {
         if (url === "coui://server_mods/com.example.server/modinfo.json") {
@@ -251,7 +307,7 @@ describe("mount.run", () => {
       },
     });
 
-    assert.equal(run(fixture), false);
+    assert.equal(await run(fixture), false);
     assert.deepEqual(fixture.alarm("probe_failed")[0].detail, {
       manifest: true,
       mods: [false],
@@ -261,7 +317,7 @@ describe("mount.run", () => {
     assert.equal(fixture.ns.mount.sequence(), 1);
   });
 
-  it("shares one run between concurrent callers and starts a new one afterwards", () => {
+  it("shares one run between concurrent callers and starts a new one afterwards", async () => {
     const pending = Deferred();
     const fixture = scene({
       cmmOptions: {
@@ -273,29 +329,34 @@ describe("mount.run", () => {
     const first = fixture.ns.mount.run();
     const second = fixture.ns.mount.run();
     assert.equal(first, second);
+    await flush();
     assert.equal(fixture.ns.mount.sequence(), 0);
 
     pending.resolve();
+    await flush();
     assert.equal(fixture.ns.mount.sequence(), 1);
 
     assert.notEqual(fixture.ns.mount.run(), first);
+    await flush();
     assert.equal(fixture.ns.mount.sequence(), 2);
   });
 
-  // A run with nothing to mount settles before run() returns; it must still
+  // A run with nothing to mount settles on the next microtask; it must still
   // clear, or every later call would hand back that first promise.
-  it("starts a fresh run after one that settled synchronously", () => {
+  it("starts a fresh run after one that settled at once", async () => {
     const fixture = scene({ cmmOptions: { serverMods: [] } });
 
     const first = fixture.ns.mount.run();
+    await flush();
 
     assert.notEqual(fixture.ns.mount.run(), first);
+    await flush();
     assert.equal(fixture.ns.mount.sequence(), 2);
   });
 
   // gw_play mounts without the remount, so the Fight click arriving while that
   // run is still open must not inherit a run that left the models unregistered.
-  it("queues a content caller behind a run that skipped the remount", () => {
+  it("queues a content caller behind a run that skipped the remount", async () => {
     const pending = Deferred();
     const fixture = scene({
       cmmOptions: {
@@ -308,17 +369,19 @@ describe("mount.run", () => {
     const second = fixture.ns.mount.run();
 
     assert.notEqual(first, second);
+    await flush();
     assert.equal(fixture.api.calls.remount.length, 0);
     assert.equal(fixture.ns.mount.sequence(), 0);
 
     pending.resolve();
+    await flush();
 
     assert.equal(fixture.ns.mount.sequence(), 2);
     assert.equal(fixture.api.calls.remount.length, 1);
-    assert.equal(run(fixture, { remountContent: false }), true);
+    assert.equal(await run(fixture, { remountContent: false }), true);
   });
 
-  it("shares a run that remounts with a caller that does not need it", () => {
+  it("shares a run that remounts with a caller that does not need it", async () => {
     const pending = Deferred();
     const fixture = scene({
       cmmOptions: {
@@ -333,12 +396,13 @@ describe("mount.run", () => {
     assert.equal(fixture.ns.mount.run(), first);
 
     pending.resolve();
+    await flush();
 
     assert.equal(fixture.ns.mount.sequence(), 1);
     assert.equal(fixture.api.calls.remount.length, 1);
   });
 
-  it("shares one contentless run between contentless callers", () => {
+  it("shares one contentless run between contentless callers", async () => {
     const pending = Deferred();
     const fixture = scene({
       cmmOptions: {
@@ -352,6 +416,7 @@ describe("mount.run", () => {
     assert.equal(fixture.ns.mount.run({ remountContent: false }), first);
 
     pending.resolve();
+    await flush();
 
     assert.equal(fixture.ns.mount.sequence(), 1);
     assert.equal(fixture.api.calls.remount.length, 0);
@@ -359,7 +424,7 @@ describe("mount.run", () => {
 
   // The queued run supersedes the one it waits on, so the run it replaced must
   // not clear it on the way out.
-  it("holds the queued run open until it settles", () => {
+  it("holds the queued run open until it settles", async () => {
     const first = Deferred();
     const second = Deferred();
     const responses = [first, second];
@@ -374,17 +439,19 @@ describe("mount.run", () => {
     const queued = fixture.ns.mount.run();
 
     first.resolve();
+    await flush();
 
     assert.equal(fixture.ns.mount.run(), queued);
     assert.equal(fixture.ns.mount.sequence(), 1);
 
     second.resolve();
+    await flush();
 
     assert.equal(fixture.ns.mount.sequence(), 2);
     assert.notEqual(fixture.ns.mount.run(), queued);
   });
 
-  it("persists the classification for the gate", () => {
+  it("persists the classification for the gate", async () => {
     const storage = fakeSessionStorage();
     const fixture = scene({
       stubs: { sessionStorage: storage },
@@ -393,7 +460,7 @@ describe("mount.run", () => {
       },
     });
 
-    run(fixture);
+    await run(fixture);
 
     assert.deepEqual(JSON.parse(storage.store.gw_server_mods_relevance), {
       "com.example.server": true,
@@ -402,12 +469,12 @@ describe("mount.run", () => {
 });
 
 describe("the merged unit list", () => {
-  it("is skipped when Community Mods has the merge disabled", () => {
+  it("is skipped when Community Mods has the merge disabled", async () => {
     const fixture = scene({
       cmmOptions: { serverMods: [mod()], mergeUnitServerMods: false },
     });
 
-    run(fixture);
+    await run(fixture);
 
     // The base list is still captured - that read belongs to the mount, not the
     // merge - but no mod list is read and nothing is written.
@@ -431,7 +498,7 @@ describe("the merged unit list", () => {
   // The regression this cache exists for: every faction ships its own
   // unit_list.json and they all mount at "/", so a read taken after the mounts
   // returns one faction's list. A base unit that faction omits was lost.
-  it("keeps a base unit that no active mod lists", () => {
+  it("keeps a base unit that no active mod lists", async () => {
     const fixture = scene({
       lists: {
         [ROOT_LIST]: JSON.stringify({
@@ -443,7 +510,7 @@ describe("the merged unit list", () => {
       },
     });
 
-    run(fixture);
+    await run(fixture);
 
     const written = JSON.parse(
       fixture.api.calls.mountMemoryFiles[0][0]["/pa/units/unit_list.json"]
@@ -457,13 +524,13 @@ describe("the merged unit list", () => {
 
   // gw_start captures it; gw_play is a different page with a fresh module scope
   // and must not re-read, because by then its own mounts shadow the path.
-  it("reuses a base list captured in an earlier scene", () => {
+  it("reuses a base list captured in an earlier scene", async () => {
     const storage = fakeSessionStorage({
       gw_server_mods_vanilla_units: JSON.stringify(["/pa/units/base.json"]),
     });
     const fixture = scene({ stubs: { sessionStorage: storage } });
 
-    run(fixture);
+    await run(fixture);
 
     assert.equal(
       fixture.$.ajaxCalls.some((call) => call.url === ROOT_LIST),
@@ -475,35 +542,35 @@ describe("the merged unit list", () => {
     assert.equal(written.units.indexOf("/pa/units/base.json") !== -1, true);
   });
 
-  it("re-reads the base list when the stored one is corrupt", () => {
+  it("re-reads the base list when the stored one is corrupt", async () => {
     const storage = fakeSessionStorage({
       gw_server_mods_vanilla_units: "{not json",
     });
     const fixture = scene({ stubs: { sessionStorage: storage } });
 
-    assert.equal(run(fixture), true);
+    assert.equal(await run(fixture), true);
     assert.equal(
       fixture.$.ajaxCalls.some((call) => call.url === ROOT_LIST),
       true
     );
   });
 
-  it("persists the base list for the scenes that follow", () => {
+  it("persists the base list for the scenes that follow", async () => {
     const storage = fakeSessionStorage();
     const fixture = scene({ stubs: { sessionStorage: storage } });
 
-    run(fixture);
+    await run(fixture);
 
     assert.deepEqual(JSON.parse(storage.store.gw_server_mods_vanilla_units), [
       "/pa/units/a.json",
     ]);
   });
 
-  it("merges from memory when the base list cannot be persisted", () => {
+  it("merges from memory when the base list cannot be persisted", async () => {
     const storage = fakeSessionStorage(undefined, { setItemThrows: true });
     const fixture = scene({ stubs: { sessionStorage: storage } });
 
-    assert.equal(run(fixture), true);
+    assert.equal(await run(fixture), true);
     assert.equal(
       fixture.console.lines.log.includes(
         "[GW-SM] base unit list not persisted"
@@ -516,11 +583,12 @@ describe("the merged unit list", () => {
     assert.equal(written.units.indexOf("/pa/units/a.json") !== -1, true);
   });
 
-  it("reads the base list once and reuses it across runs", () => {
+  it("reads the base list once and reuses it across runs", async () => {
     const fixture = scene();
 
-    run(fixture);
-    run(fixture);
+    await run(fixture);
+    await run(fixture);
+    await flush();
 
     assert.equal(
       fixture.$.ajaxCalls.filter((call) => call.url === ROOT_LIST).length,
@@ -531,7 +599,7 @@ describe("the merged unit list", () => {
 
   // A base list that cannot be read costs units in one faction combination. It
   // must not cost the mount.
-  it("still merges the mod lists when the base list cannot be read", () => {
+  it("still merges the mod lists when the base list cannot be read", async () => {
     const fixture = scene({
       ajax: (url) => {
         if (url === ROOT_LIST) {
@@ -544,7 +612,7 @@ describe("the merged unit list", () => {
       },
     });
 
-    assert.equal(run(fixture), true);
+    assert.equal(await run(fixture), true);
     const written = JSON.parse(
       fixture.api.calls.mountMemoryFiles[0][0]["/pa/units/unit_list.json"]
     );
@@ -555,28 +623,28 @@ describe("the merged unit list", () => {
     );
   });
 
-  it("still merges when Community Mods leaves the merge enabled", () => {
+  it("still merges when Community Mods leaves the merge enabled", async () => {
     const fixture = scene({
       cmmOptions: { serverMods: [mod()], mergeUnitServerMods: true },
     });
 
-    run(fixture);
+    await run(fixture);
 
     assert.equal(fixture.api.calls.mountMemoryFiles.length, 1);
   });
 
-  it("is not written when no mod ships a readable list", () => {
+  it("is not written when no mod ships a readable list", async () => {
     const fixture = scene({
       lists: { [MOD_LIST]: "{not json" },
     });
 
-    run(fixture);
+    await run(fixture);
 
     assert.equal(fixture.api.calls.mountMemoryFiles.length, 0);
     assert.deepEqual(fixture.codes(), []);
   });
 
-  it("ignores a list without a units array and a root list that cannot be read", () => {
+  it("ignores a list without a units array and a root list that cannot be read", async () => {
     const fixture = scene({
       ajax: (url) => {
         if (url === ROOT_LIST) {
@@ -592,7 +660,7 @@ describe("the merged unit list", () => {
       },
     });
 
-    run(fixture);
+    await run(fixture);
 
     assert.deepEqual(fixture.api.calls.mountMemoryFiles, [
       [
@@ -605,7 +673,7 @@ describe("the merged unit list", () => {
     ]);
   });
 
-  it("dedupes across lists and accepts an already parsed response", () => {
+  it("dedupes across lists and accepts an already parsed response", async () => {
     const fixture = scene({
       ajax: (url) => {
         if (url === ROOT_LIST) {
@@ -622,7 +690,7 @@ describe("the merged unit list", () => {
       },
     });
 
-    run(fixture);
+    await run(fixture);
 
     assert.deepEqual(
       JSON.parse(
@@ -638,9 +706,9 @@ describe("the merged unit list", () => {
     );
   });
 
-  it("only logs when one list could not be written, but alarms for several", () => {
+  it("only logs when one list could not be written, but alarms for several", async () => {
     const one = scene({ apiOptions: { mountMemoryFiles: false } });
-    run(one);
+    await run(one);
     assert.deepEqual(one.codes(), []);
     assert.equal(
       one.console.lines.log.includes(
@@ -655,7 +723,7 @@ describe("the merged unit list", () => {
       lists: { [secondList]: JSON.stringify({ units: ["/pa/units/c.json"] }) },
       apiOptions: { mountMemoryFiles: () => rejected("refused") },
     });
-    run(two);
+    await run(two);
     assert.deepEqual(two.alarm("unit_list_unmerged")[0].detail, {
       units: 3,
       lists: 2,
@@ -665,9 +733,9 @@ describe("the merged unit list", () => {
 });
 
 describe("the launch progress report", () => {
-  it("is a no-op without GWO's progress model and survives a throwing stage", () => {
+  it("is a no-op without GWO's progress model and survives a throwing stage", async () => {
     const silent = scene({ model: null });
-    assert.equal(run(silent), true);
+    assert.equal(await run(silent), true);
 
     const broken = scene();
     broken.model.gwoLaunchProgress = {
@@ -675,7 +743,7 @@ describe("the launch progress report", () => {
         throw new Error("no screen");
       },
     };
-    assert.equal(run(broken), true);
+    assert.equal(await run(broken), true);
     assert.equal(
       broken.console.lines.log.includes(
         "[GW-SM] progress report failed no screen"
@@ -686,7 +754,7 @@ describe("the launch progress report", () => {
 });
 
 describe("mount module", () => {
-  it("does not load twice into one scope", () => {
+  it("does not load twice into one scope", async () => {
     const { ctx, ns } = scene();
     const first = ns.mount;
 
@@ -725,7 +793,7 @@ describe("mount.run rootOnly", () => {
     );
   }
 
-  it("mounts the enabled server zips and their companions at the root without Community Mods", () => {
+  it("mounts the enabled server zips and their companions at the root without Community Mods", async () => {
     const fixture = startScene([
       mod({
         identifier: "com.faction",
@@ -743,7 +811,7 @@ describe("mount.run rootOnly", () => {
     ]);
     const storage = fixture.ctx.sessionStorage;
 
-    assert.equal(run(fixture, { rootOnly: true }), true);
+    assert.equal(await run(fixture, { rootOnly: true }), true);
 
     assert.deepEqual(fixture.api.calls.zipMount, [
       ["/download/com.example.server.zip", "/", false],
@@ -766,37 +834,37 @@ describe("mount.run rootOnly", () => {
     assert.equal(state.mods[0].identifier, "com.faction");
   });
 
-  it("counts a failed root mount against the run", () => {
+  it("counts a failed root mount against the run", async () => {
     const fixture = startScene([mod({ context: "server", enabled: true })], {
       apiOptions: { zipMount: () => resolved(false) },
     });
 
-    assert.equal(run(fixture, { rootOnly: true }), false);
+    assert.equal(await run(fixture, { rootOnly: true }), false);
     assert.equal(fixture.alarm("mount_failed").length, 1);
   });
 
-  it("settles as mounted with nothing to mount", () => {
+  it("settles as mounted with nothing to mount", async () => {
     const fixture = startScene([]);
 
-    assert.equal(run(fixture, { rootOnly: true }), true);
+    assert.equal(await run(fixture, { rootOnly: true }), true);
     assert.deepEqual(fixture.ns.mount.state().mods, []);
   });
 
-  it("still refuses a battle mount without Community Mods", () => {
+  it("still refuses a battle mount without Community Mods", async () => {
     const fixture = startScene([mod({ context: "server", enabled: true })]);
 
-    assert.equal(run(fixture), false);
+    assert.equal(await run(fixture), false);
     assert.equal(fixture.ns.mount.sequence(), 0);
   });
 
-  it("records the scene lists on a battle mount", () => {
+  it("records the scene lists on a battle mount", async () => {
     const fixture = scene({
       cmmOptions: {
         serverMods: [mod({ scenes: { live_game: ["coui://ui/mods/x.js"] } })],
       },
     });
 
-    assert.equal(run(fixture), true);
+    assert.equal(await run(fixture), true);
     assert.deepEqual(
       JSON.parse(fixture.ctx.sessionStorage.store.gw_server_mods_scenes),
       { live_game: ["coui://ui/mods/x.js"] }
