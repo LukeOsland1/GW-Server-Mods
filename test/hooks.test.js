@@ -7,8 +7,8 @@ const { describe, it } = require("node:test");
 const assert = require("node:assert/strict");
 
 const { sharedScene } = require("../scripts/lib/shared-scene.js");
-const { Deferred, resolved } = require("../scripts/lib/fake-jquery.js");
-const { loadFile } = require("../scripts/lib/scene-loader.js");
+const { enginePromise, resolved } = require("../scripts/lib/fake-jquery.js");
+const { flush, loadFile } = require("../scripts/lib/scene-loader.js");
 
 // hooks.js reads ns.mount at call time, so the real mount is swapped for a
 // recorder after loading.
@@ -76,13 +76,15 @@ describe("hooks.install", () => {
     assert.equal(fixture.ns.hooks.install(), true);
   });
 
-  it("installs once: a second install finds the marks and wraps nothing again", () => {
+  it("installs once: a second install finds the marks and wraps nothing again", async () => {
     const fixture = scene();
     fixture.ns.hooks.install();
     fixture.ns.hooks.install();
 
     fixture.api.file.unmountAllMemoryFiles();
+    await flush();
     fixture.cmm.remountClientMods();
+    await flush();
 
     assert.equal(fixture.runs.length, 2);
     assert.equal(fixture.console.lines.log.length, 2);
@@ -90,7 +92,7 @@ describe("hooks.install", () => {
 });
 
 describe("the unmount accessor", () => {
-  it("remounts after the original unmount settles, forwarding this and arguments", () => {
+  it("remounts after the original unmount settles, forwarding this and arguments", async () => {
     const calls = [];
     const fixture = scene({
       apiOptions: {
@@ -106,13 +108,14 @@ describe("the unmount accessor", () => {
     fixture.api.file.unmountAllMemoryFiles("a", "b").then((value) => {
       outcome = value;
     });
+    await flush();
 
     assert.deepEqual(calls, [["a", "b"]]);
     assert.deepEqual(fixture.runs, [{ remountContent: false }]);
     assert.equal(outcome, true);
   });
 
-  it("survives the scene assigning a new unmount after install", () => {
+  it("survives the scene assigning a new unmount after install", async () => {
     const fixture = scene();
     fixture.ns.hooks.install();
     let replaced = 0;
@@ -121,6 +124,7 @@ describe("the unmount accessor", () => {
       replaced += 1;
     };
     fixture.api.file.unmountAllMemoryFiles();
+    await flush();
 
     assert.equal(replaced, 1);
     assert.equal(fixture.runs.length, 1);
@@ -139,7 +143,7 @@ describe("the unmount accessor", () => {
     assert.equal(fixture.api.file.unmountAllMemoryFiles, "gone");
   });
 
-  it("skips the remount when the inner wrapper already ran one", () => {
+  it("skips the remount when the inner wrapper already ran one", async () => {
     const fixture = scene();
     fixture.ns.hooks.install();
     const inner = fixture.api.file.unmountAllMemoryFiles;
@@ -152,32 +156,75 @@ describe("the unmount accessor", () => {
     fixture.api.file.unmountAllMemoryFiles().then((value) => {
       outcome = value;
     });
+    await flush();
 
     assert.equal(fixture.runs.length, 1);
     assert.equal(outcome, true);
   });
 
-  it("waits for a pending unmount before remounting", () => {
-    const pending = Deferred();
+  // The engine promise this returns is the one $.when read as a plain value,
+  // which ran the remount while the teardown was still in flight.
+  it("waits for a pending unmount before remounting", async () => {
+    const pending = enginePromise();
     const fixture = scene({
-      apiOptions: { unmountAllMemoryFiles: () => pending.promise() },
+      apiOptions: { unmountAllMemoryFiles: () => pending },
+    });
+    fixture.ns.hooks.install();
+    let settled = false;
+
+    fixture.api.file.unmountAllMemoryFiles().always(() => {
+      settled = true;
+    });
+    await flush();
+
+    assert.equal(fixture.runs.length, 0);
+    assert.equal(settled, false);
+
+    pending.resolve();
+    await flush();
+
+    assert.equal(fixture.runs.length, 1);
+    assert.equal(settled, true);
+  });
+
+  // The sequence guard is read when the teardown settles, so two teardowns in
+  // one tick share the one remount rather than running it twice. That is the
+  // same guard that stops a nested wrapper remounting again, and a remount
+  // costs seconds.
+  it("remounts once for two teardowns in the same tick", async () => {
+    const fixture = scene();
+    fixture.ns.hooks.install();
+
+    fixture.api.file.unmountAllMemoryFiles();
+    fixture.cmm.remountClientMods();
+    await flush();
+
+    assert.equal(fixture.runs.length, 1);
+  });
+
+  // Nothing else puts the mounts back, so a teardown that failed still remounts.
+  it("remounts after a teardown that rejected", async () => {
+    const failing = enginePromise();
+    const fixture = scene({
+      apiOptions: { unmountAllMemoryFiles: () => failing },
     });
     fixture.ns.hooks.install();
 
     fixture.api.file.unmountAllMemoryFiles();
-    assert.equal(fixture.runs.length, 0);
+    failing.reject("refused");
+    await flush();
 
-    pending.resolve();
     assert.equal(fixture.runs.length, 1);
   });
 
-  it("is idempotent when the scene assigns the wrapped function back", () => {
+  it("is idempotent when the scene assigns the wrapped function back", async () => {
     const fixture = scene();
     fixture.ns.hooks.install();
     const wrapped = fixture.api.file.unmountAllMemoryFiles;
 
     fixture.api.file.unmountAllMemoryFiles = wrapped;
     fixture.api.file.unmountAllMemoryFiles();
+    await flush();
 
     assert.equal(fixture.api.file.unmountAllMemoryFiles, wrapped);
     assert.equal(fixture.runs.length, 1);
@@ -185,11 +232,12 @@ describe("the unmount accessor", () => {
 });
 
 describe("the client remount wrapper", () => {
-  it("remounts after Community Mods remounts its client mods", () => {
+  it("remounts after Community Mods remounts its client mods", async () => {
     const fixture = scene();
     fixture.ns.hooks.install();
 
     fixture.cmm.remountClientMods("x");
+    await flush();
 
     assert.deepEqual(fixture.cmm.calls.remountClientMods, [["x"]]);
     assert.equal(fixture.runs.length, 1);

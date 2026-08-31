@@ -11,6 +11,7 @@ const { mod } = require("../scripts/lib/fake-cmm.js");
 const { resolved } = require("../scripts/lib/fake-jquery.js");
 const {
   createContext,
+  flush,
   loadFile,
   loadScene,
 } = require("../scripts/lib/scene-loader.js");
@@ -19,7 +20,7 @@ const BUILD = "coui://ui/mods/com.example/shared_build.js";
 const LIVE = "coui://ui/mods/com.example/live_game.js";
 
 describe("live_game remount", () => {
-  it("installs the hooks, mounts without content registration and loads the server mod UI", () => {
+  it("installs the hooks, mounts without content registration and loads the server mod UI", async () => {
     const loads = [];
     const fixture = sharedScene({
       cmmOptions: {
@@ -44,6 +45,7 @@ describe("live_game remount", () => {
       return resolved(true);
     };
     fixture.api.file.unmountAllMemoryFiles();
+    await flush();
 
     assert.deepEqual(runs, [{ remountContent: false }]);
     assert.deepEqual(fixture.codes(), []);

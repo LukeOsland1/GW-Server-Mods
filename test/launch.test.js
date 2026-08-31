@@ -10,7 +10,7 @@ const assert = require("node:assert/strict");
 const { sharedScene } = require("../scripts/lib/shared-scene.js");
 const { Deferred, resolved } = require("../scripts/lib/fake-jquery.js");
 const { mod } = require("../scripts/lib/fake-cmm.js");
-const { loadFile } = require("../scripts/lib/scene-loader.js");
+const { flush, loadFile } = require("../scripts/lib/scene-loader.js");
 
 function scene(options) {
   const opts = options || {};
@@ -64,10 +64,11 @@ describe("launch installation", () => {
 
   // The hooks keep the default, so a mount triggered by an unmount mid-launch
   // still restores the catalogue.
-  it("installs the hooks without inheriting the scene's options", () => {
+  it("installs the hooks without inheriting the scene's options", async () => {
     const fixture = scene({ cmmOptions: { serverMods: [mod()] } });
 
     fixture.api.file.unmountAllMemoryFiles();
+    await flush();
 
     assert.equal(fixture.api.calls.remount.length, 1);
   });
