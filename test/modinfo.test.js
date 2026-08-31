@@ -89,6 +89,16 @@ describe("modinfo scenes", () => {
     );
   });
 
+  it("cover every scene a faction server mod ships build bar data in", () => {
+    // Bugs and Exiles put their build groups and their SpecIdToGridMap entries
+    // in shared_build. Without an entry here that script never runs, every one
+    // of that faction's units falls into a group no tab shows, and the player
+    // has no build bar. See design.md.
+    for (const scene of ["shared_build", "live_game_build_bar"]) {
+      assert.equal(scenes.includes(scene), true, scene);
+    }
+  });
+
   it("give icon_atlas only its own script", () => {
     assert.deepEqual(sceneFiles("icon_atlas").map(couiToFsPath), [
       path.join(MOD_ROOT, "icon_atlas", "icons.js"),

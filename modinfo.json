@@ -67,6 +67,13 @@
       "coui://ui/mods/com.pa.gw-server-mods/shared/server_ui.js",
       "coui://ui/mods/com.pa.gw-server-mods/live_game/remount.js"
     ],
+    "shared_build": [
+      "coui://ui/mods/com.pa.gw-server-mods/shared/promise.js",
+      "coui://ui/mods/com.pa.gw-server-mods/shared/alarm.js",
+      "coui://ui/mods/com.pa.gw-server-mods/shared/manifest.js",
+      "coui://ui/mods/com.pa.gw-server-mods/shared/server_ui.js",
+      "coui://ui/mods/com.pa.gw-server-mods/shared_build/ui.js"
+    ],
     "live_game_build_bar": [
       "coui://ui/mods/com.pa.gw-server-mods/shared/promise.js",
       "coui://ui/mods/com.pa.gw-server-mods/shared/alarm.js",
