@@ -187,6 +187,12 @@ to run without Community Mods, since the `rootOnly` path is the only one the fal
 listing is fit for: re-mounting the merged unit list under a running battle would replace
 the referee's cooked one.
 
+`gw_coop_per_player_loadout` gets the shared modules for the same reason and nothing else:
+a co-op viewer picks a commander there, and a Galactic War mod offering a server mod's
+commanders needs the root mounts to read their specs and portraits. No scene script of
+this mod's own runs there - the Galactic War mod calls `mount.run` itself when it has a
+reason to, so a viewer who is not choosing a modded commander pays nothing.
+
 ## Keeping the mounts
 
 Community Mods' `remountClientMods()` calls `unmountAllMemoryFiles`, which drops the root

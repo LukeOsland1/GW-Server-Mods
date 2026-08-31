@@ -74,6 +74,21 @@ describe("modinfo scenes", () => {
     }
   });
 
+  it("give gw_coop_per_player_loadout the shared modules and nothing else", () => {
+    // The Galactic War mod calls mount.run itself there, so a viewer who is not
+    // choosing a modded commander pays for no mount. See design.md.
+    assert.deepEqual(
+      sceneFiles("gw_coop_per_player_loadout").map(couiToFsPath),
+      [
+        "promise.js",
+        "alarm.js",
+        "manifest.js",
+        "mount.js",
+        "capability.js",
+      ].map((file) => path.join(MOD_ROOT, "shared", file))
+    );
+  });
+
   it("give icon_atlas only its own script", () => {
     assert.deepEqual(sceneFiles("icon_atlas").map(couiToFsPath), [
       path.join(MOD_ROOT, "icon_atlas", "icons.js"),

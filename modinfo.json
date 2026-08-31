@@ -32,6 +32,13 @@
       "coui://ui/mods/com.pa.gw-server-mods/connect_to_game/start.js",
       "coui://ui/mods/com.pa.gw-server-mods/connect_to_game/gate.js"
     ],
+    "gw_coop_per_player_loadout": [
+      "coui://ui/mods/com.pa.gw-server-mods/shared/promise.js",
+      "coui://ui/mods/com.pa.gw-server-mods/shared/alarm.js",
+      "coui://ui/mods/com.pa.gw-server-mods/shared/manifest.js",
+      "coui://ui/mods/com.pa.gw-server-mods/shared/mount.js",
+      "coui://ui/mods/com.pa.gw-server-mods/shared/capability.js"
+    ],
     "gw_lobby": [
       "coui://ui/mods/com.pa.gw-server-mods/shared/promise.js",
       "coui://ui/mods/com.pa.gw-server-mods/shared/alarm.js",
