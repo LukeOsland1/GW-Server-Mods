@@ -514,9 +514,11 @@ describe("manifest.scenes", () => {
     assert.deepEqual(ns.manifest.scenes("gw_play"), []);
   });
 
+  // localStorage, because sessionStorage is per panel and the build bar panel
+  // cannot see what live_game wrote. See design.md.
   it("persists the list for the scenes that cannot list mods themselves", () => {
     const storage = fakeSessionStorage();
-    const fixture = scene({ stubs: { sessionStorage: storage } });
+    const fixture = scene({ stubs: { localStorage: storage } });
 
     fixture.ns.manifest.rememberScenes([
       { scenes: { live_game: [A] } },
@@ -529,7 +531,7 @@ describe("manifest.scenes", () => {
 
     const later = scene({
       cmm: null,
-      stubs: { sessionStorage: fakeSessionStorage(storage.store) },
+      stubs: { localStorage: fakeSessionStorage(storage.store) },
     });
     assert.deepEqual(later.ns.manifest.scenes("live_game"), [A, B]);
     assert.deepEqual(later.codes(), []);
@@ -541,7 +543,7 @@ describe("manifest.scenes", () => {
     });
     const fixture = scene({
       cmmOptions: { serverMods: [] },
-      stubs: { sessionStorage: storage },
+      stubs: { localStorage: storage },
     });
 
     assert.deepEqual(fixture.ns.manifest.rememberScenes([]), null);
@@ -554,7 +556,7 @@ describe("manifest.scenes", () => {
   it("copes with storage that cannot be written or parsed", () => {
     const refusing = scene({
       stubs: {
-        sessionStorage: fakeSessionStorage({}, { setItemThrows: true }),
+        localStorage: fakeSessionStorage({}, { setItemThrows: true }),
       },
     });
     refusing.ns.manifest.rememberScenes([{ scenes: { live_game: [A] } }]);
@@ -568,7 +570,7 @@ describe("manifest.scenes", () => {
     const garbled = scene({
       cmm: null,
       stubs: {
-        sessionStorage: fakeSessionStorage({ gw_server_mods_scenes: "{" }),
+        localStorage: fakeSessionStorage({ gw_server_mods_scenes: "{" }),
       },
     });
     assert.deepEqual(garbled.ns.manifest.scenes("live_game"), []);

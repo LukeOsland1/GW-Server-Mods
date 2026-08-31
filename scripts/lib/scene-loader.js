@@ -93,6 +93,9 @@ function createContext(stubs) {
     console: fakeConsole(),
     document: fakeDocument(),
     sessionStorage: fakeSessionStorage(),
+    // Shared across panels where sessionStorage is not, which is why the scene
+    // list lives here. Same fake: the two stores have the same shape.
+    localStorage: fakeSessionStorage(),
   };
   Object.keys(stubs || {}).forEach((name) => {
     if (stubs[name] === undefined) {

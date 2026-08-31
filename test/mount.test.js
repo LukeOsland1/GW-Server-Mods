@@ -785,7 +785,12 @@ describe("mount.run rootOnly", () => {
           cmm: null,
           stubs: {
             ko: fakeKo(records),
-            localStorage: { installedModsDB: "1" },
+            // A real store as well as the property: gw_start reads the manager's
+            // own record off localStorage, and the scene list is written there.
+            localStorage: Object.assign(
+              fakeSessionStorage({ installedModsDB: "1" }),
+              { installedModsDB: "1" }
+            ),
           },
         },
         options
@@ -809,7 +814,7 @@ describe("mount.run rootOnly", () => {
         installedPath: "/download/com.faction-client.zip",
       }),
     ]);
-    const storage = fixture.ctx.sessionStorage;
+    const storage = fixture.ctx.localStorage;
 
     assert.equal(await run(fixture, { rootOnly: true }), true);
 
@@ -866,7 +871,7 @@ describe("mount.run rootOnly", () => {
 
     assert.equal(await run(fixture), true);
     assert.deepEqual(
-      JSON.parse(fixture.ctx.sessionStorage.store.gw_server_mods_scenes),
+      JSON.parse(fixture.ctx.localStorage.store.gw_server_mods_scenes),
       { live_game: ["coui://ui/mods/x.js"] }
     );
   });

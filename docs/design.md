@@ -187,6 +187,13 @@ to run without Community Mods, since the `rootOnly` path is the only one the fal
 listing is fit for: re-mounting the merged unit list under a running battle would replace
 the referee's cooked one.
 
+**`sessionStorage` is per panel, not per process.** Measured in a battle: `live_game` held 50 keys
+including the scene list, and `live_game_build_bar` held one (`dev_mode`) and could not see it.
+`localStorage` is shared - a value written in `live_game` reads back in `live_game_build_bar`. The
+scene list therefore lives in `localStorage`, because the panel that needs it earliest is the one
+that cannot see a `sessionStorage` write. The classification stays in `sessionStorage`: the gate
+reads it in the same panel that wrote it.
+
 A faction can ship its build bar data in the **server** mod. Bugs and Exiles both put their
 build groups and their `SpecIdToGridMap` entries in `shared_build.js`. Legion does not - its copy
 is in the paired client mod, which the game always loads - so Legion hid this for a long time.
@@ -194,6 +201,13 @@ is in the paired client mod, which the game always loads - so Legion hid this fo
 then puts that unit in a `misc` group that no tab shows. The player sees an empty build bar and
 no error. This mod therefore needs a scene entry for **every** scene a server mod can ship UI in,
 not only the scenes this mod has work of its own to do in.
+
+The entry alone is not enough. `build.js` reads `scene_mod_list["shared_build"]` while the panel's
+own scripts are still to come, so `serverUi.load` must find the scene list **synchronously**. With
+no list in hand it reads the store and loads late, and a late load is as good as no load here: the
+build set captures `SpecIdToGridMap` when it is built, and a faction whose entries arrive after that
+has every unit stamped `misc`. `makeBuildLists` then drops a unit whose buildables are all `misc`,
+`parseSelection` cannot resolve the selected commander, and the player has no build bar.
 
 `gw_coop_per_player_loadout` gets the shared modules for the same reason and nothing else:
 a co-op viewer picks a commander there, and a Galactic War mod offering a server mod's

@@ -314,7 +314,14 @@
   // The scene scripts the active server mods declare, keyed by scene, as
   // Community Mods' activeServerModScenes builds them for a skirmish. Persisted
   // like the classification: the battle scenes have no Community Mods and no
-  // store of their own to ask. See design.md.
+  // store of their own to ask.
+  //
+  // localStorage, not sessionStorage: sessionStorage is per panel, not per
+  // process. live_game holds the key and live_game_build_bar cannot see it, and
+  // the build bar is the panel that needs the list earliest - build.js reads
+  // scene_mod_list["shared_build"] before the scene's own mods load. Without a
+  // list in hand at that moment the read goes async and lands after the build
+  // set is built, which costs a whole faction its build bar. See design.md.
   var SCENES_KEY = "gw_server_mods_scenes";
   var scenesCache = null;
 
@@ -342,12 +349,26 @@
     scenesCache = unionScenes(mods);
 
     try {
-      sessionStorage.setItem(SCENES_KEY, JSON.stringify(scenesCache));
+      localStorage.setItem(SCENES_KEY, JSON.stringify(scenesCache));
     } catch (e) {
       ns.log("server mod scene list not persisted");
     }
 
     return scenesCache;
+  }
+
+  // localStorage first, then the sessionStorage a previous build of this mod
+  // wrote, so an upgrade mid-session still finds a list.
+  function storedScenes() {
+    var read = function (store) {
+      try {
+        return JSON.parse(store.getItem(SCENES_KEY) || "null");
+      } catch (e) {
+        return null;
+      }
+    };
+
+    return read(localStorage) || read(sessionStorage) || {};
   }
 
   function scenes(scene) {
@@ -356,11 +377,7 @@
     if (active.length) {
       scenesCache = unionScenes(active);
     } else if (!scenesCache) {
-      try {
-        scenesCache = JSON.parse(sessionStorage.getItem(SCENES_KEY) || "{}");
-      } catch (e) {
-        scenesCache = {};
-      }
+      scenesCache = storedScenes();
     }
 
     return _.isUndefined(scene) ? scenesCache : scenesCache[scene] || [];
