@@ -8,7 +8,7 @@ const assert = require("node:assert/strict");
 
 const { sharedScene } = require("../scripts/lib/shared-scene.js");
 const { mod } = require("../scripts/lib/fake-cmm.js");
-const { loadFile } = require("../scripts/lib/scene-loader.js");
+const { flush, loadFile } = require("../scripts/lib/scene-loader.js");
 const { resolved } = require("../scripts/lib/fake-jquery.js");
 
 const A = "coui://ui/mods/com.example/live_game/a.js";
@@ -119,7 +119,7 @@ describe("serverUi.load", () => {
     assert.deepEqual(fixture.codes(), []);
   });
 
-  it("reads the store and loads late when nothing is listed or persisted", () => {
+  it("reads the store and loads late when nothing is listed or persisted", async () => {
     const records = [
       mod({ context: "server", enabled: true, scenes: { live_game: [A] } }),
     ];
@@ -139,6 +139,8 @@ describe("serverUi.load", () => {
     });
 
     assert.deepEqual(fixture.ns.serverUi.load("live_game"), []);
+    await flush();
+
     assert.deepEqual(fixture.loads, [[A]]);
     assert.deepEqual(fixture.ns.serverUi.loaded(), [A]);
     assert.deepEqual(fixture.codes(), []);

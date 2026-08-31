@@ -206,12 +206,9 @@ describe("manifest.pairedClientMods", () => {
 });
 
 describe("manifest.detectClientRelevance", () => {
-  function detect(fixture, mods) {
-    let settled = false;
-    fixture.ns.manifest.detectClientRelevance(mods).always(() => {
-      settled = true;
-    });
-    assert.equal(settled, true);
+  async function detect(fixture, mods) {
+    await fixture.ns.manifest.detectClientRelevance(mods);
+
     return JSON.parse(fixture.ctx.sessionStorage.store[RELEVANCE_KEY]);
   }
 
@@ -226,10 +223,10 @@ describe("manifest.detectClientRelevance", () => {
     installedPath: "/mods/folder/",
   };
 
-  it("lists each mod's pa/ tree under its own root", () => {
+  it("lists each mod's pa/ tree under its own root", async () => {
     const fixture = scene();
 
-    detect(fixture, [zipMod, folderMod]);
+    await detect(fixture, [zipMod, folderMod]);
 
     assert.deepEqual(fixture.api.calls.list, [
       ["/server_mods/Com.Zip/pa/", false],
@@ -237,7 +234,7 @@ describe("manifest.detectClientRelevance", () => {
     ]);
   });
 
-  it("treats a tree of only ai directories as server-only", () => {
+  it("treats a tree of only ai directories as server-only", async () => {
     const fixture = scene({
       apiOptions: {
         list: () =>
@@ -248,11 +245,11 @@ describe("manifest.detectClientRelevance", () => {
       },
     });
 
-    assert.deepEqual(detect(fixture, [zipMod]), { "com.zip": false });
+    assert.deepEqual(await detect(fixture, [zipMod]), { "com.zip": false });
     assert.equal(fixture.ns.manifest.relevanceKnown(), true);
   });
 
-  it("treats anything else under pa/ as something the client renders", () => {
+  it("treats anything else under pa/ as something the client renders", async () => {
     const fixture = scene({
       apiOptions: {
         list: () =>
@@ -263,32 +260,32 @@ describe("manifest.detectClientRelevance", () => {
       },
     });
 
-    assert.deepEqual(detect(fixture, [zipMod]), { "com.zip": true });
+    assert.deepEqual(await detect(fixture, [zipMod]), { "com.zip": true });
   });
 
-  it("reads an object listing by its keys", () => {
+  it("reads an object listing by its keys", async () => {
     const fixture = scene({
       apiOptions: {
         list: () => resolved({ "/server_mods/Com.Zip/pa/aircraft": {} }),
       },
     });
 
-    assert.deepEqual(detect(fixture, [zipMod]), { "com.zip": true });
+    assert.deepEqual(await detect(fixture, [zipMod]), { "com.zip": true });
   });
 
-  it("assumes relevance when the listing fails or cannot be requested", () => {
+  it("assumes relevance when the listing fails or cannot be requested", async () => {
     const failing = scene({ apiOptions: { list: () => rejected("boom") } });
-    assert.deepEqual(detect(failing, [zipMod]), { "com.zip": true });
+    assert.deepEqual(await detect(failing, [zipMod]), { "com.zip": true });
 
     const noList = scene({ apiOptions: { list: false } });
-    assert.deepEqual(detect(noList, [zipMod]), { "com.zip": true });
+    assert.deepEqual(await detect(noList, [zipMod]), { "com.zip": true });
 
     const noFile = scene();
     noFile.api.file = null;
-    assert.deepEqual(detect(noFile, [zipMod]), { "com.zip": true });
+    assert.deepEqual(await detect(noFile, [zipMod]), { "com.zip": true });
   });
 
-  it("keeps the classification in memory when it cannot be persisted", () => {
+  it("keeps the classification in memory when it cannot be persisted", async () => {
     const fixture = scene({
       stubs: {
         sessionStorage: fakeSessionStorage({}, { setItemThrows: true }),
@@ -297,7 +294,7 @@ describe("manifest.detectClientRelevance", () => {
       apiOptions: { list: () => resolved(["/server_mods/Com.Zip/pa/units/"]) },
     });
 
-    fixture.ns.manifest.detectClientRelevance([zipMod]);
+    await fixture.ns.manifest.detectClientRelevance([zipMod]);
 
     assert.equal(fixture.ns.manifest.relevanceKnown(), true);
     assert.equal(
@@ -310,10 +307,10 @@ describe("manifest.detectClientRelevance", () => {
     );
   });
 
-  it("settles with nothing to classify", () => {
+  it("settles with nothing to classify", async () => {
     const fixture = scene();
 
-    assert.deepEqual(detect(fixture, []), {});
+    assert.deepEqual(await detect(fixture, []), {});
     assert.equal(fixture.ns.manifest.relevanceKnown(), false);
   });
 });
@@ -398,19 +395,14 @@ function fallbackScene(records, options) {
 }
 
 describe("manifest.load", () => {
-  it("resolves at once with Community Mods present", () => {
+  it("resolves at once with Community Mods present", async () => {
     const fixture = scene();
-    let outcome;
 
-    fixture.ns.manifest.load().then((ok) => {
-      outcome = ok;
-    });
-
-    assert.equal(outcome, true);
+    assert.equal(await fixture.ns.manifest.load(), true);
     assert.equal(fixture.ns.manifest.listed(), true);
   });
 
-  it("reads the enabled mods from the store without Community Mods, once", () => {
+  it("reads the enabled mods from the store without Community Mods, once", async () => {
     const fixture = fallbackScene([
       mod({
         identifier: "com.b",
@@ -435,8 +427,7 @@ describe("manifest.load", () => {
     ]);
 
     assert.equal(fixture.ns.manifest.listed(), false);
-    fixture.ns.manifest.load();
-    fixture.ns.manifest.load();
+    await Promise.all([fixture.ns.manifest.load(), fixture.ns.manifest.load()]);
 
     assert.equal(fixture.ns.manifest.listed(), true);
     // Community Mods' own call, _.sortByOrder(mods, "priority", "desc"), takes
@@ -452,18 +443,18 @@ describe("manifest.load", () => {
     );
   });
 
-  it("lists nothing when the store does not exist or ko is absent", () => {
+  it("lists nothing when the store does not exist or ko is absent", async () => {
     const noStore = fallbackScene([mod()], { stubs: { localStorage: {} } });
-    noStore.ns.manifest.load();
+    await noStore.ns.manifest.load();
     assert.deepEqual(noStore.ns.manifest.activeServerMods(), []);
 
     const noKo = fallbackScene([mod()], { stubs: { ko: undefined } });
-    noKo.ns.manifest.load();
+    await noKo.ns.manifest.load();
     assert.deepEqual(noKo.ns.manifest.activeServerMods(), []);
     assert.deepEqual(noKo.codes(), []);
   });
 
-  it("pairs companions from the store too", () => {
+  it("pairs companions from the store too", async () => {
     const fixture = fallbackScene([
       mod({
         identifier: "com.faction",
@@ -480,7 +471,7 @@ describe("manifest.load", () => {
     ]);
 
     assert.deepEqual(fixture.ns.manifest.pairedClientMods(), []);
-    fixture.ns.manifest.load();
+    await fixture.ns.manifest.load();
 
     assert.deepEqual(
       fixture.ns.manifest.pairedClientMods().map((m) => m.identifier),

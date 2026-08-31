@@ -57,12 +57,15 @@ Consequences worth knowing:
   prove the code under test waits for it.
 - `fake-api.js` — `api.file.zip.mount`, `api.file.list`, `mountMemoryFiles`,
   `unmountAllMemoryFiles`, `api.content.remount`, `api.net.startGame`, each optional
-  (`false` leaves it out) and each recorded on `api.calls`.
+  (`false` leaves it out) and each recorded on `api.calls`. Every one returns an
+  **engine promise**, as the game's does, whatever shape the option handler gave
+  back. That is deliberate: a shipped file that hands one to `$.when` fails a test
+  rather than silently skipping the wait.
 - `fake-cmm.js` — `CommunityModsManager` and `mod()` records in CMM's raw shape.
 - `shared-scene.js` — the six `shared/*.js` files over a full set of fakes, with
   `codes()` / `alarm(code)` readers over the alarms raised.
-- `scene-loader.js` — also `fakeDocument`, `fakeSessionStorage` and `fakeConsole`;
-  the console keeps only the first argument per line, as PA's log does.
+- `scene-loader.js` — also `fakeDocument`, `fakeSessionStorage`, `fakeConsole` and
+  `flush()`; the console keeps only the first argument per line, as PA's log does.
 
 Shipped code runs on native promises, which settle on a microtask rather than in
 the call, so a test that goes through one `await`s the result. Where it must assert

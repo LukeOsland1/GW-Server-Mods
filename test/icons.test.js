@@ -12,7 +12,11 @@ const {
   rejected,
   resolved,
 } = require("../scripts/lib/fake-jquery.js");
-const { createContext, loadScene } = require("../scripts/lib/scene-loader.js");
+const {
+  createContext,
+  flush,
+  loadScene,
+} = require("../scripts/lib/scene-loader.js");
 
 const ICON_DIR = "/ui/main/atlas/icon_atlas/img/strategic_icons/";
 
@@ -40,7 +44,7 @@ function scene(options) {
 }
 
 describe("icon_atlas icons", () => {
-  it("adds every icon under the strategic icon directory that the atlas lacks, once", () => {
+  it("adds every icon under the strategic icon directory that the atlas lacks, once", async () => {
     const fixture = scene({
       list: () =>
         resolved([
@@ -54,6 +58,7 @@ describe("icon_atlas icons", () => {
     });
 
     fixture.model.sendIconList();
+    await flush();
 
     assert.deepEqual(fixture.api.calls.list, [[ICON_DIR, false]]);
     assert.deepEqual(fixture.icons, ["foo", "bar", "baz"]);
@@ -64,22 +69,24 @@ describe("icon_atlas icons", () => {
     ]);
   });
 
-  it("reads an object listing by its keys and notifies nobody when nothing is new", () => {
+  it("reads an object listing by its keys and notifies nobody when nothing is new", async () => {
     const fixture = scene({
       list: () => resolved({ [ICON_DIR + "icon_si_foo.png"]: {} }),
     });
 
     fixture.model.sendIconList();
+    await flush();
 
     assert.deepEqual(fixture.icons, ["foo"]);
     assert.deepEqual(fixture.mutations, []);
     assert.equal(fixture.sends.length, 1);
   });
 
-  it("still sends the stock list when the directory cannot be listed", () => {
+  it("still sends the stock list when the directory cannot be listed", async () => {
     const fixture = scene({ list: () => rejected("no dir") });
 
     fixture.model.sendIconList();
+    await flush();
 
     assert.equal(fixture.sends.length, 1);
     assert.deepEqual(fixture.ctx.console.lines.error, [
@@ -87,14 +94,16 @@ describe("icon_atlas icons", () => {
     ]);
   });
 
-  it("still sends the stock list when files cannot be listed at all", () => {
+  it("still sends the stock list when files cannot be listed at all", async () => {
     const noList = scene({ api: createFakeApi({ list: false }) });
     noList.model.sendIconList();
+    await flush();
     assert.equal(noList.sends.length, 1);
 
     const noFile = scene();
     noFile.api.file = null;
     noFile.model.sendIconList();
+    await flush();
     assert.equal(noFile.sends.length, 1);
   });
 

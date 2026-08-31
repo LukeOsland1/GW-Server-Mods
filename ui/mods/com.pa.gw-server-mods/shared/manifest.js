@@ -53,31 +53,30 @@
   var loading = null;
 
   function readInstalledMods() {
-    var deferred = $.Deferred();
-
     if (
       typeof ko === "undefined" ||
       !root.localStorage ||
       !root.localStorage.installedModsDB
     ) {
-      deferred.resolve([]);
-      return deferred.promise();
+      return Promise.resolve([]);
     }
 
     var store = ko.observableArray([]).extend({
       db: { local_name: "installedModsDB", db_name: "installed_mods" },
     });
 
-    $.when(store.ready).always(function (mods) {
-      deferred.resolve(_.isArray(mods) ? mods : []);
-    });
+    function read(mods) {
+      return _.isArray(mods) ? mods : [];
+    }
 
-    return deferred.promise();
+    // The extender rejects `ready` when the record is missing, which is a store
+    // with nothing in it rather than a failure.
+    return Promise.resolve(store.ready).then(read, read);
   }
 
   function load() {
     if (available() || installed) {
-      return $.Deferred().resolve(true).promise();
+      return Promise.resolve(true);
     }
 
     if (loading) {
@@ -265,15 +264,17 @@
   }
 
   function detectRelevance(mod) {
-    var deferred = $.Deferred();
-
-    if (!api.file || !_.isFunction(api.file.list)) {
+    function assumeRelevant() {
+      // Unknown shape, so assume the client needs it.
       loadRelevance()[mod.identifier] = true;
-      deferred.resolve();
-      return deferred.promise();
     }
 
-    api.file.list(modRoot(mod) + "pa/", false).then(
+    if (!api.file || !_.isFunction(api.file.list)) {
+      assumeRelevant();
+      return Promise.resolve();
+    }
+
+    return Promise.resolve(api.file.list(modRoot(mod) + "pa/", false)).then(
       function (listing) {
         var entries =
           listing && listing.length ? listing : _.keys(listing || {});
@@ -281,28 +282,19 @@
         loadRelevance()[mod.identifier] = _.some(entries, function (entry) {
           return !SERVER_ONLY.test(leafName(entry));
         });
-
-        deferred.resolve();
       },
-      function () {
-        // Unknown shape, so assume the client needs it.
-        loadRelevance()[mod.identifier] = true;
-        deferred.resolve();
-      }
+      assumeRelevant
     );
-
-    return deferred.promise();
   }
 
   function detectClientRelevance(mods) {
-    return $.when
-      .apply(
-        $,
+    return ns
+      .settled(
         _.map(mods, function (mod) {
           return detectRelevance(mod);
         })
       )
-      .always(saveRelevance);
+      .then(saveRelevance);
   }
 
   // Only these need to match between host and viewer. Empty until a mount has
