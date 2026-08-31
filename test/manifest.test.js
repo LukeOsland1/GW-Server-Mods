@@ -395,6 +395,24 @@ function fallbackScene(records, options) {
 }
 
 describe("manifest.load", () => {
+  // As mount.run: a caller's $.when cannot see a native promise. See design.md.
+  it("hands back a promise a caller's $.when waits for", async () => {
+    const fixture = scene();
+    const waited = [];
+    const loading = fixture.ns.manifest.load();
+
+    assert.equal(typeof loading.promise, "function");
+    fixture.$.when(loading).always(() => waited.push("settled"));
+    assert.deepEqual(waited, []);
+
+    await loading;
+    assert.deepEqual(waited, ["settled"]);
+    assert.equal(
+      typeof fixture.ns.manifest.detectClientRelevance([]).promise,
+      "function"
+    );
+  });
+
   it("resolves at once with Community Mods present", async () => {
     const fixture = scene();
 

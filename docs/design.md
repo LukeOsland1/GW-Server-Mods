@@ -29,8 +29,8 @@ which is why each module is an IIFE that guards against being loaded twice.
 
 ## Promises
 
-Everything inside this mod is a native promise. jQuery appears at three seams and
-nowhere else.
+Inside this mod every chain is native, because every chain carries an engine promise.
+Everything that **leaves** the mod is a jQuery promise, adapted with `ns.jq`.
 
 jQuery 2.1.4 decides what is a promise by looking for a `promise` **method** — see
 `$.when` and `deferred.then` in `media/ui/main/shared/js/thirdparty/jquery-2.1.4.js`. An
@@ -48,19 +48,27 @@ and `eslint.config.mjs` whitelists it. `Promise.allSettled` is Chrome 76 and is 
 available; `shared/promise.js` supplies `ns.settled`, which neutralises each input first
 so one failure cannot cancel the rest — the behaviour `$.when(...).always()` gave.
 
-Three wrappers return their value to stock code that calls `.always()` on it, so those
-must hand back a jQuery promise, built with `ns.jq`:
+`ns.jq` builds a `$.Deferred` from a thenable. Everything the mod hands out goes through
+it, stock callers and other mods alike:
 
-| Wrapper                                  | Stock callers                                                                                             |
+| What is handed out                       | Who reads it                                                                                              |
 | ---------------------------------------- | --------------------------------------------------------------------------------------------------------- |
 | `api.file.unmountAllMemoryFiles`         | `gw_play/gw_referee.js:24`, `:202`, `replay_loading.js:158`, Community Mods `states/replay_loading.js:80` |
 | `CommunityModsManager.remountClientMods` | `gw_play.js:202`, `:218`, Community Mods `transit.js:107`, `:130`, `start.js:332`, `gw_referee.js:20`     |
 | `api.net.startGame`                      | `connect_to_game.js:709`                                                                                  |
+| `ns.mount.run`                           | GW-AI-Overhaul `shared/race_mods.js:103`, through `$.when`                                                |
+| `ns.manifest.load`                       | GW-AI-Overhaul `shared/race_mods.js:59`, through `$.when`                                                 |
+| `ns.manifest.detectClientRelevance`      | nothing outside this mod today; it is on the public namespace and returns a promise                       |
 
-Nothing else the mod returns is read by stock code: `model.sendIconList`'s value is
-discarded at `icon_atlas.js:163`, and `ns.mount.run` and `ns.manifest.*` have no caller
-outside this mod. `$.ajax` stays as the HTTP client — its return is a thenable, so native
-code consumes it — and Community Mods' own `$.Deferred`s are adopted the same way.
+`ns.mount.run` wraps inside `run` rather than at the export, so concurrent callers still
+share one object. The native chain underneath is what `shared/hooks.js` and
+`connect_to_game/start.js` build on, and a native promise adopts a jQuery one, so those
+internal callers are unaffected.
+
+`icon_atlas/icons.js` is the exception, and stays native end to end: the icon_atlas scene
+loads it alone, without the shared modules, and stock discards its value at
+`icon_atlas.js:163`. `$.ajax` stays as the HTTP client — its return is a thenable, so
+native code consumes it — and Community Mods' own `$.Deferred`s are adopted the same way.
 
 ## Seams assigned after mod scripts run
 

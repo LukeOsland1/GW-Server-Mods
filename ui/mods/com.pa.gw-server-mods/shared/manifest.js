@@ -378,9 +378,13 @@
     });
   }
 
+  // jQuery on the way out: a caller's $.when cannot see a native promise any
+  // more than an engine one. See design.md.
   ns.manifest = {
     available: available,
-    load: load,
+    load: function () {
+      return ns.jq(load());
+    },
     listed: listed,
     activeServerMods: activeServerMods,
     serverModInfo: serverModInfo,
@@ -388,7 +392,9 @@
     rememberScenes: rememberScenes,
     modRoot: modRoot,
     pairedClientMods: pairedClientMods,
-    detectClientRelevance: detectClientRelevance,
+    detectClientRelevance: function (mods) {
+      return ns.jq(detectClientRelevance(mods));
+    },
     clientRelevantServerMods: clientRelevantServerMods,
     relevanceKnown: relevanceKnown,
     identifiers: identifiers,

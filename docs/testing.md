@@ -68,7 +68,10 @@ Consequences worth knowing:
   `flush()`; the console keeps only the first argument per line, as PA's log does.
 
 Shipped code runs on native promises, which settle on a microtask rather than in
-the call, so a test that goes through one `await`s the result. Where it must assert
+the call, so a test that goes through one `await`s the result. The three members
+that leave the mod — `ns.mount.run`, `ns.manifest.load` and
+`ns.manifest.detectClientRelevance` — hand back a jQuery promise over that native
+chain, so they settle on the same microtask and are awaited the same way. Where it must assert
 that something has **not** happened yet, `flush()` from `scene-loader.js` lets the
 pending microtasks run first:
 

@@ -425,10 +425,15 @@
       current = runOnce(options);
     }
 
+    // jQuery on the way out: a caller's $.when cannot see a native promise any
+    // more than an engine one. Wrapped once rather than per call, so concurrent
+    // callers still share the object. See design.md.
+    current = ns.jq(current);
+
     // The queued run supersedes the one it waits on, so only the run still
-    // current may clear. Nothing can settle before this function returns - a
-    // native promise settles on a microtask - but the ordering is still the
-    // one to keep: two runs must not overlap their mounts.
+    // current may clear. Nothing can settle before this function returns - the
+    // native promise behind it settles on a microtask - but the ordering is
+    // still the one to keep: two runs must not overlap their mounts.
     function clear() {
       if (running === current) {
         running = null;
