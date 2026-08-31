@@ -46,11 +46,15 @@ Consequences worth knowing:
 
 - `fake-jquery.js` — a jQuery 2 `Deferred` (`done`/`fail`/`always`/`then`/`promise`/
   `state`) whose callbacks fire synchronously on settle, `$.when` with jQuery's
-  semantics (one thenable passes through, several resolve with **one argument per
-  input** — `mount.js` reads `arguments`, so a Promise-based fake would be wrong),
-  and `$.ajax` routed to a resolver that returns the body or throws to fail. A URL
-  with no resolver fails, so a fixture cannot drift from what the code asks for.
-  `$.ajaxCalls` records every request, `cache` flag included.
+  semantics, and `$.ajax` routed to a resolver that returns the body or throws to
+  fail. A URL with no resolver fails, so a fixture cannot drift from what the code
+  asks for. `$.ajaxCalls` records every request, `cache` flag included.
+  `$.when` and `then` identify a promise by a **`promise` method**, exactly as
+  jQuery 2.1.4 does, so an engine promise given to either is read as a plain value
+  and never waited for. `test/promise.test.js` pins that. Also exported:
+  `enginePromise()`, an object with `then`, `resolve` and `reject` and none of
+  jQuery's methods — the shape every `api.*` call returns. Hold one pending to
+  prove the code under test waits for it.
 - `fake-api.js` — `api.file.zip.mount`, `api.file.list`, `mountMemoryFiles`,
   `unmountAllMemoryFiles`, `api.content.remount`, `api.net.startGame`, each optional
   (`false` leaves it out) and each recorded on `api.calls`.
@@ -60,9 +64,31 @@ Consequences worth knowing:
 - `scene-loader.js` — also `fakeDocument`, `fakeSessionStorage` and `fakeConsole`;
   the console keeps only the first argument per line, as PA's log does.
 
-Because settlement is synchronous, most tests need no `await`: call the shipped
-function, then assert. A `Deferred()` left pending is how a test holds a run open
-(mount coalescing, the unmount hook, the patched `fight`/`startGame`).
+Shipped code runs on native promises, which settle on a microtask rather than in
+the call, so a test that goes through one `await`s the result. Where it must assert
+that something has **not** happened yet, `flush()` from `scene-loader.js` lets the
+pending microtasks run first:
+
+```js
+const gate = enginePromise();
+const fixture = scene({ apiOptions: { remount: () => gate } });
+let done = false;
+
+fixture.ns.mount.run().then(() => {
+  done = true;
+});
+await flush();
+assert.equal(done, false); // still registering content
+
+gate.resolve();
+await flush();
+assert.equal(done, true);
+```
+
+The jQuery fakes still settle synchronously, which is what the `ns.jq` seams and
+`$.ajax` are asserted through. A `Deferred()` or an `enginePromise()` left pending
+is how a test holds a run open (mount coalescing, the unmount hook, the patched
+`fight`/`startGame`).
 
 ## Conventions
 

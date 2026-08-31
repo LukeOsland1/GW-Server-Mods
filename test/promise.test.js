@@ -6,23 +6,23 @@
 const { describe, it } = require("node:test");
 const assert = require("node:assert/strict");
 
-const { createFakeJQuery } = require("../scripts/lib/fake-jquery.js");
+const {
+  createFakeJQuery,
+  enginePromise,
+} = require("../scripts/lib/fake-jquery.js");
 const { createContext, loadFile } = require("../scripts/lib/scene-loader.js");
+
+// The shape every api.* call returns, already settled.
+function resolvedEngine(value) {
+  const promise = enginePromise();
+  promise.resolve(value);
+  return promise;
+}
 
 function load() {
   const ctx = createContext({ $: createFakeJQuery() });
   loadFile(ctx, "shared/promise.js");
   return ctx.GwServerMods;
-}
-
-// An engine promise: `then` and nothing else. jQuery 2.1.4 does not recognise
-// one, which is the whole reason these helpers exist.
-function enginePromise(settle) {
-  return {
-    then: function (onDone, onFail) {
-      settle(onDone, onFail);
-    },
-  };
 }
 
 describe("ns.settled", () => {
@@ -44,10 +44,9 @@ describe("ns.settled", () => {
   it("adopts an engine promise, which $.when cannot", async () => {
     const ns = load();
 
-    assert.deepEqual(
-      await ns.settled([enginePromise((done) => done("registered"))]),
-      ["registered"]
-    );
+    assert.deepEqual(await ns.settled([resolvedEngine("registered")]), [
+      "registered",
+    ]);
   });
 
   it("resolves an empty list", async () => {
@@ -98,5 +97,49 @@ describe("ns.jq", () => {
     loadFile(ctx, "shared/promise.js");
 
     assert.equal(ctx.GwServerMods.settled, first);
+  });
+});
+
+// The fake jQuery is this suite's statement of what the shipped one does. These
+// pin the premise both helpers rest on, and the reason the fakes hand back
+// engine promises everywhere else.
+describe("jQuery 2.1.4's promise test", () => {
+  it("waits for a jQuery promise and not for an engine promise", () => {
+    const $ = createFakeJQuery();
+    const settled = [];
+
+    $.when($.Deferred().promise()).always(() => settled.push("jquery"));
+    $.when(enginePromise()).always(() => settled.push("engine"));
+
+    assert.deepEqual(settled, ["engine"]);
+  });
+
+  it("skips an engine promise among several, and waits for the rest", () => {
+    const $ = createFakeJQuery();
+    const pending = $.Deferred();
+    let settled = false;
+
+    $.when(pending.promise(), enginePromise()).always(() => {
+      settled = true;
+    });
+
+    assert.equal(settled, false);
+    pending.resolve();
+    assert.equal(settled, true);
+  });
+
+  it("does not chain a `then` handler that returns an engine promise", () => {
+    const $ = createFakeJQuery();
+    const gate = enginePromise();
+    let value;
+
+    $.Deferred()
+      .resolve()
+      .then(() => gate)
+      .done((result) => {
+        value = result;
+      });
+
+    assert.equal(value, gate);
   });
 });

@@ -2,12 +2,20 @@
 
 // The jQuery 2 subset the shipped code calls: a Deferred whose callbacks fire
 // synchronously on settle, $.when with jQuery's pass-through and spread-argument
-// semantics (mount.js reads `arguments` in the callback), and an $.ajax routed to
-// a per-test resolver. Synchronous settlement keeps most tests free of await; a
-// Deferred left pending holds a run open for the coalescing tests.
+// semantics, and an $.ajax routed to a per-test resolver. Synchronous settlement
+// keeps these tests free of await; a Deferred left pending holds a seam open.
+//
+// `when` and `then` identify a promise the way jQuery 2.1.4 does - by a `promise`
+// method, not by `then`. That is why an engine promise handed to $.when is read
+// as a plain value and never waited for, and `enginePromise()` below is how a
+// test reproduces one. See docs/design.md.
 
 function isThenable(value) {
   return !!value && typeof value.then === "function";
+}
+
+function isJqPromise(value) {
+  return !!value && typeof value.promise === "function";
 }
 
 function Deferred() {
@@ -66,7 +74,7 @@ function Deferred() {
           next.reject(e);
           return;
         }
-        if (isThenable(result)) {
+        if (isJqPromise(result)) {
           // Not next.resolve itself: as a handler it would return the
           // deferred, a thenable, and an already settled chain would recurse.
           result.then(
@@ -115,13 +123,15 @@ function rejected() {
   return deferred.reject.apply(deferred, arguments).promise();
 }
 
-// jQuery's $.when: one thenable is returned as is, one plain value resolves to
-// it, several settle together with one resolved value per argument.
+// jQuery's $.when: one jQuery promise is returned as is, anything else with one
+// argument resolves to it, several settle together with one value per argument.
+// Anything without a `promise` method counts as already resolved, engine and
+// native promises included.
 function when() {
   const inputs = Array.prototype.slice.call(arguments);
 
   if (inputs.length === 1) {
-    return isThenable(inputs[0]) ? inputs[0] : resolved(inputs[0]);
+    return isJqPromise(inputs[0]) ? inputs[0].promise() : resolved(inputs[0]);
   }
 
   const deferred = Deferred();
@@ -138,7 +148,7 @@ function when() {
   }
 
   inputs.forEach(function (input, index) {
-    if (!isThenable(input)) {
+    if (!isJqPromise(input)) {
       values[index] = input;
       remaining -= 1;
       if (!remaining) {
@@ -161,6 +171,47 @@ function when() {
   });
 
   return deferred.promise();
+}
+
+// An engine promise, the shape every api.* call returns: `then` and nothing
+// else. No `promise`, `done`, `fail` or `always`, so jQuery does not recognise
+// it. A test holds one pending to prove the code under test waits for it.
+function enginePromise() {
+  let state = "pending";
+  let args = [];
+  const handlers = [];
+
+  function fire() {
+    while (handlers.length) {
+      const handler = handlers.shift()[state === "resolved" ? 0 : 1];
+      if (typeof handler === "function") {
+        handler.apply(null, args);
+      }
+    }
+  }
+
+  function settle(next) {
+    return function () {
+      if (state !== "pending") {
+        return;
+      }
+      state = next;
+      args = Array.prototype.slice.call(arguments);
+      fire();
+    };
+  }
+
+  return {
+    then: function (onDone, onFail) {
+      handlers.push([onDone, onFail]);
+      if (state !== "pending") {
+        fire();
+      }
+    },
+    resolve: settle("resolved"),
+    reject: settle("rejected"),
+    state: () => state,
+  };
 }
 
 // `ajax(url, options)` returns the response text, or throws to fail the request.
@@ -193,6 +244,8 @@ function createFakeJQuery(options) {
 module.exports = {
   Deferred,
   createFakeJQuery,
+  enginePromise,
+  isJqPromise,
   isThenable,
   rejected,
   resolved,

@@ -74,6 +74,15 @@ function fakeSessionStorage(initial, options) {
   };
 }
 
+// Lets every pending microtask run. A native path settles on a microtask rather
+// than in the call, so a test that asserts something has *not* happened yet must
+// give it the chance to first. See docs/testing.md.
+function flush() {
+  return new Promise(function (resolve) {
+    setImmediate(resolve);
+  });
+}
+
 // `stubs` are the engine globals the test supplies (api, model, handlers, $,
 // CommunityModsManager, sessionStorage, document...). A stub given as undefined
 // is left absent, which is how a test asserts the missing-engine alarms.
@@ -142,6 +151,7 @@ module.exports = {
   fakeConsole,
   fakeDocument,
   fakeSessionStorage,
+  flush,
   loadFile,
   loadScene,
   modinfo,
