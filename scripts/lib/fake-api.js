@@ -79,7 +79,8 @@ function createFakeApi(options) {
     api.net.startGame = record(
       "startGame",
       opts.startGame,
-      resolved("started")
+      resolved("started"),
+      "engine"
     );
   }
 

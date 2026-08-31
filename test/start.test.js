@@ -8,8 +8,8 @@ const assert = require("node:assert/strict");
 
 const { sharedScene } = require("../scripts/lib/shared-scene.js");
 const { mod } = require("../scripts/lib/fake-cmm.js");
-const { Deferred, rejected } = require("../scripts/lib/fake-jquery.js");
-const { loadFile } = require("../scripts/lib/scene-loader.js");
+const { enginePromise, rejected } = require("../scripts/lib/fake-jquery.js");
+const { flush, loadFile } = require("../scripts/lib/scene-loader.js");
 
 function observable(initial, options) {
   const opts = options || {};
@@ -40,7 +40,7 @@ function scene(options) {
   fixture.ns.mount = Object.assign({}, mount, {
     run: (o) => {
       runs.push(o);
-      return opts.pending ? opts.pending.promise() : mount.run(o);
+      return opts.pending || mount.run(o);
     },
   });
   fixture.runs = runs;
@@ -48,16 +48,22 @@ function scene(options) {
   return fixture;
 }
 
-function start(fixture, mode) {
-  const outcome = { value: undefined, error: undefined };
-  fixture.api.net.startGame("region", mode, { p: 1 }).then(
-    (value) => {
+// The patched call must still answer .always(), which is how stock
+// connect_to_game.js:709 reads it.
+async function start(fixture, mode) {
+  const outcome = { value: undefined, error: undefined, always: 0 };
+  fixture.api.net
+    .startGame("region", mode, { p: 1 })
+    .done((value) => {
       outcome.value = value;
-    },
-    (error) => {
+    })
+    .fail((error) => {
       outcome.error = error;
-    }
-  );
+    })
+    .always(() => {
+      outcome.always += 1;
+    });
+  await flush();
   return outcome;
 }
 
@@ -127,17 +133,18 @@ describe("the patched startGame", () => {
     assert.equal(fixture.runs.length, 0);
   });
 
-  it("mounts first for any mode ending in gw, then declares the server mods", () => {
+  it("mounts first for any mode ending in gw, then declares the server mods", async () => {
     for (const mode of ["gw", "GW", "coop_gw"]) {
       const fixture = scene();
 
-      const outcome = start(fixture, mode);
+      const outcome = await start(fixture, mode);
 
       assert.deepEqual(fixture.runs, [undefined]);
       assert.deepEqual(fixture.api.calls.startGame, [
         ["region", mode, { p: 1 }],
       ]);
       assert.equal(outcome.value, "started");
+      assert.equal(outcome.always, 1);
       assert.deepEqual(fixture.model.gameModIdentifiers(), [
         "com.client",
         "Com.Server",
@@ -146,79 +153,83 @@ describe("the patched startGame", () => {
     }
   });
 
-  it("waits for the mount before starting", () => {
-    const pending = Deferred();
+  it("waits for the mount before starting", async () => {
+    const pending = enginePromise();
     const fixture = scene({ pending });
 
-    start(fixture, "gw");
+    const outcome = start(fixture, "gw");
+    await flush();
     assert.equal(fixture.api.calls.startGame.length, 0);
 
     pending.resolve(false);
+    await flush();
     assert.equal(fixture.api.calls.startGame.length, 1);
+    assert.equal((await outcome).always, 1);
   });
 
-  it("starts even after a mount that failed", () => {
-    const pending = Deferred();
+  it("starts even after a mount that failed", async () => {
+    const pending = enginePromise();
     const fixture = scene({ pending });
 
     const outcome = start(fixture, "gw");
     pending.reject("mount broke");
 
-    assert.equal(outcome.value, "started");
+    assert.equal((await outcome).value, "started");
   });
 
-  it("rejects when the start rejects", () => {
+  it("rejects when the start rejects", async () => {
     const fixture = scene({
       apiOptions: { startGame: () => rejected("refused") },
     });
 
-    const outcome = start(fixture, "gw");
+    const outcome = await start(fixture, "gw");
 
     assert.equal(outcome.error, "refused");
+    assert.equal(outcome.always, 1);
     assert.deepEqual(fixture.model.gameModIdentifiers(), ["com.client"]);
   });
 
-  it("accepts a start that returns a plain value", () => {
+  it("accepts a start that returns a plain value", async () => {
     const fixture = scene({ apiOptions: { startGame: () => "plain" } });
 
-    assert.equal(start(fixture, "gw").value, "plain");
+    assert.equal((await start(fixture, "gw")).value, "plain");
   });
 });
 
 describe("declaring the identifiers", () => {
-  it("does nothing without the list or without server mods", () => {
+  it("does nothing without the list or without server mods", async () => {
     const noList = scene({ model: {} });
-    assert.equal(start(noList, "gw").value, "started");
+    assert.equal((await start(noList, "gw")).value, "started");
 
     const noModel = scene({ model: null });
     noModel.ctx.model = null;
-    assert.equal(start(noModel, "gw").value, "started");
+    assert.equal((await start(noModel, "gw")).value, "started");
 
     const noMods = scene({ cmmOptions: { serverMods: [] } });
-    start(noMods, "gw");
+    await start(noMods, "gw");
     assert.deepEqual(noMods.model.gameModIdentifiers(), ["com.client"]);
   });
 
-  it("starts from an empty list and does not repeat an identifier", () => {
+  it("starts from an empty list and does not repeat an identifier", async () => {
     const fixture = scene({ model: { gameModIdentifiers: observable(null) } });
-    start(fixture, "gw");
+    await start(fixture, "gw");
     assert.deepEqual(fixture.model.gameModIdentifiers(), ["Com.Server"]);
 
     const already = scene({
       model: { gameModIdentifiers: observable(["Com.Server"]) },
     });
-    start(already, "gw");
+    await start(already, "gw");
     assert.deepEqual(already.model.gameModIdentifiers(), ["Com.Server"]);
   });
 
-  it("raises identifiers_lost when the list does not keep them", () => {
+  it("raises identifiers_lost when the list does not keep them", async () => {
     const fixture = scene({
       model: {
         gameModIdentifiers: observable(["com.client"], { readOnly: true }),
       },
     });
 
-    start(fixture, "gw");
+    await start(fixture, "gw");
 
     assert.deepEqual(fixture.alarm("identifiers_lost")[0].detail, {
       expected: ["Com.Server"],
@@ -226,7 +237,7 @@ describe("declaring the identifiers", () => {
     });
   });
 
-  it("raises identifiers_lost when the list reads back as nothing", () => {
+  it("raises identifiers_lost when the list reads back as nothing", async () => {
     let reads = 0;
     const fixture = scene({
       model: {
@@ -237,7 +248,7 @@ describe("declaring the identifiers", () => {
       },
     });
 
-    start(fixture, "gw");
+    await start(fixture, "gw");
 
     assert.equal(fixture.alarm("identifiers_lost")[0].detail.applied.length, 0);
   });
