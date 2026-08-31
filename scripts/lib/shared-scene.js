@@ -1,6 +1,6 @@
 "use strict";
 
-// The five shared modules loaded in modinfo.json's order over a full set of
+// The six shared modules loaded in modinfo.json's order over a full set of
 // engine fakes, which a test then adjusts or extends with a scene script. Pass
 // `null` for api/cmm/model to leave that global absent.
 
@@ -10,6 +10,7 @@ const { createFakeCmm } = require("./fake-cmm.js");
 const { createFakeJQuery } = require("./fake-jquery.js");
 
 const SHARED = [
+  "shared/promise.js",
   "shared/alarm.js",
   "shared/manifest.js",
   "shared/mount.js",

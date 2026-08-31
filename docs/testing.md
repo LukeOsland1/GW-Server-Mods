@@ -55,7 +55,7 @@ Consequences worth knowing:
   `unmountAllMemoryFiles`, `api.content.remount`, `api.net.startGame`, each optional
   (`false` leaves it out) and each recorded on `api.calls`.
 - `fake-cmm.js` — `CommunityModsManager` and `mod()` records in CMM's raw shape.
-- `shared-scene.js` — the five `shared/*.js` files over a full set of fakes, with
+- `shared-scene.js` — the six `shared/*.js` files over a full set of fakes, with
   `codes()` / `alarm(code)` readers over the alarms raised.
 - `scene-loader.js` — also `fakeDocument`, `fakeSessionStorage` and `fakeConsole`;
   the console keeps only the first argument per line, as PA's log does.
