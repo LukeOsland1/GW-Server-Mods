@@ -409,8 +409,14 @@ describe("the merged unit list", () => {
 
     run(fixture);
 
+    // The base list is still captured - that read belongs to the mount, not the
+    // merge - but no mod list is read and nothing is written.
     assert.equal(
-      fixture.$.ajaxCalls.some((call) => call.url === ROOT_LIST),
+      fixture.$.ajaxCalls.filter((call) => call.url === ROOT_LIST).length,
+      1
+    );
+    assert.equal(
+      fixture.$.ajaxCalls.some((call) => call.url === MOD_LIST),
       false
     );
     assert.equal(fixture.api.calls.mountMemoryFiles.length, 0);
@@ -418,6 +424,133 @@ describe("the merged unit list", () => {
       fixture.console.lines.log.includes(
         "[GW-SM] unit list merge disabled by Community Mods"
       ),
+      true
+    );
+  });
+
+  // The regression this cache exists for: every faction ships its own
+  // unit_list.json and they all mount at "/", so a read taken after the mounts
+  // returns one faction's list. A base unit that faction omits was lost.
+  it("keeps a base unit that no active mod lists", () => {
+    const fixture = scene({
+      lists: {
+        [ROOT_LIST]: JSON.stringify({
+          units: ["/pa/units/base.json", "/pa/units/omitted.json"],
+        }),
+        [MOD_LIST]: JSON.stringify({
+          units: ["/pa/units/base.json", "/pa/units/faction.json"],
+        }),
+      },
+    });
+
+    run(fixture);
+
+    const written = JSON.parse(
+      fixture.api.calls.mountMemoryFiles[0][0]["/pa/units/unit_list.json"]
+    );
+    assert.deepEqual(written.units.sort(), [
+      "/pa/units/base.json",
+      "/pa/units/faction.json",
+      "/pa/units/omitted.json",
+    ]);
+  });
+
+  // gw_start captures it; gw_play is a different page with a fresh module scope
+  // and must not re-read, because by then its own mounts shadow the path.
+  it("reuses a base list captured in an earlier scene", () => {
+    const storage = fakeSessionStorage({
+      gw_server_mods_vanilla_units: JSON.stringify(["/pa/units/base.json"]),
+    });
+    const fixture = scene({ stubs: { sessionStorage: storage } });
+
+    run(fixture);
+
+    assert.equal(
+      fixture.$.ajaxCalls.some((call) => call.url === ROOT_LIST),
+      false
+    );
+    const written = JSON.parse(
+      fixture.api.calls.mountMemoryFiles[0][0]["/pa/units/unit_list.json"]
+    );
+    assert.equal(written.units.indexOf("/pa/units/base.json") !== -1, true);
+  });
+
+  it("re-reads the base list when the stored one is corrupt", () => {
+    const storage = fakeSessionStorage({
+      gw_server_mods_vanilla_units: "{not json",
+    });
+    const fixture = scene({ stubs: { sessionStorage: storage } });
+
+    assert.equal(run(fixture), true);
+    assert.equal(
+      fixture.$.ajaxCalls.some((call) => call.url === ROOT_LIST),
+      true
+    );
+  });
+
+  it("persists the base list for the scenes that follow", () => {
+    const storage = fakeSessionStorage();
+    const fixture = scene({ stubs: { sessionStorage: storage } });
+
+    run(fixture);
+
+    assert.deepEqual(JSON.parse(storage.store.gw_server_mods_vanilla_units), [
+      "/pa/units/a.json",
+    ]);
+  });
+
+  it("merges from memory when the base list cannot be persisted", () => {
+    const storage = fakeSessionStorage(undefined, { setItemThrows: true });
+    const fixture = scene({ stubs: { sessionStorage: storage } });
+
+    assert.equal(run(fixture), true);
+    assert.equal(
+      fixture.console.lines.log.includes(
+        "[GW-SM] base unit list not persisted"
+      ),
+      true
+    );
+    const written = JSON.parse(
+      fixture.api.calls.mountMemoryFiles[0][0]["/pa/units/unit_list.json"]
+    );
+    assert.equal(written.units.indexOf("/pa/units/a.json") !== -1, true);
+  });
+
+  it("reads the base list once and reuses it across runs", () => {
+    const fixture = scene();
+
+    run(fixture);
+    run(fixture);
+
+    assert.equal(
+      fixture.$.ajaxCalls.filter((call) => call.url === ROOT_LIST).length,
+      1
+    );
+    assert.equal(fixture.api.calls.mountMemoryFiles.length, 2);
+  });
+
+  // A base list that cannot be read costs units in one faction combination. It
+  // must not cost the mount.
+  it("still merges the mod lists when the base list cannot be read", () => {
+    const fixture = scene({
+      ajax: (url) => {
+        if (url === ROOT_LIST) {
+          throw new Error("404");
+        }
+        if (url === MOD_LIST) {
+          return JSON.stringify({ units: ["/pa/units/faction.json"] });
+        }
+        return "";
+      },
+    });
+
+    assert.equal(run(fixture), true);
+    const written = JSON.parse(
+      fixture.api.calls.mountMemoryFiles[0][0]["/pa/units/unit_list.json"]
+    );
+    assert.deepEqual(written.units, ["/pa/units/faction.json"]);
+    assert.equal(
+      fixture.console.lines.log.includes("[GW-SM] base unit list not read"),
       true
     );
   });
@@ -618,7 +751,12 @@ describe("mount.run rootOnly", () => {
     ]);
     assert.equal(fixture.api.calls.remount.length, 1);
     assert.deepEqual(fixture.api.calls.mountMemoryFiles, []);
-    assert.deepEqual(fixture.$.ajaxCalls, []);
+    // gw_start captures the base list as well: its own root mounts are what
+    // would shadow it for every later scene.
+    assert.deepEqual(
+      fixture.$.ajaxCalls.map((call) => call.url),
+      [ROOT_LIST]
+    );
     assert.deepEqual(JSON.parse(storage.store.gw_server_mods_scenes), {
       live_game: ["coui://ui/mods/com.faction/live_game.js"],
     });

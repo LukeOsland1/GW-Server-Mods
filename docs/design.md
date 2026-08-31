@@ -66,12 +66,34 @@ are all there; only the registry is lost. The referee reads that registry client
 (`gw_referee.js` fetches `spec://pa/units/unit_list.json`), so the server's own mount-order
 merge never reaches it.
 
-`mergeUnitList()` therefore reads the root list and each mounted zip's
-`/server_mods/<id>/pa/units/unit_list.json`, unions them in mount order, and mounts the result
+`mergeUnitList()` therefore reads the base game's list and each mounted zip's
+`/server_mods/<id>/pa/units/unit_list.json`, unions them, and mounts the result
 at `/pa/units/unit_list.json` with `api.file.mountMemoryFiles`. It is a memory file, so every
 `unmountAllMemoryFiles` drops it — and every unmount already re-runs the mount through the
 hooks, so it comes back with the zips. The referee then overwrites the same path with the
 cooked superset it derived from the merged list, in the order the hook wrapper guarantees.
+
+#### Where the base list comes from
+
+The base game's own list cannot be read at merge time. `mountAtRoot` puts every active
+faction zip at `/`, each of those zips ships `pa/units/unit_list.json`, and this mod is the
+only thing that mounts at the root — Community Mods mounts under `/server_mods/<id>/` and
+`/client_mods/<id>/` — so from the first root mount onwards `coui://pa/units/unit_list.json`
+returns whichever faction mounted last. There is no `pa_ex1` path to read instead: `pa_ex1`
+is mounted onto `pa` before mods are, so only `/pa/...` exists at runtime.
+
+The shadowing faction is itself active, so its list is already in the merge through its own
+`/server_mods/<id>/` read. A read taken at merge time therefore contributes nothing, and any
+base unit that no active faction lists was dropped: Bugs omits four (`radar_jammer`,
+`tank_jammer`, `tank_anti_nuke`, `orbital_mine`), so a Bugs-only war lost them, while
+enabling Legion or Exiles alongside brought them back because those two carry the full base
+list. A list whose effect depends on which _other_ mods are enabled cannot be expressing
+intent, which is why this is treated as a loss rather than a removal.
+
+`captureVanillaUnits()` runs before the first mount of a run and caches the read in
+`sessionStorage`, so the first scene of the process captures the unshadowed list and every
+later scene reuses it. A base list that cannot be read falls back to the union of the mod
+lists: it costs four units in one faction combination, and must never cost a battle.
 
 **`spec://` caches a path after its first read, for the life of the process.** Measured
 directly: after mounting the merged list, `coui://pa/units/unit_list.json` returned 575 units

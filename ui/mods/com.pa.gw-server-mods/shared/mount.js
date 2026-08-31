@@ -96,6 +96,65 @@
     return deferred.promise();
   }
 
+  // The base game's own unit list, captured before anything shadows it.
+  //
+  // Every faction server mod ships pa/units/unit_list.json, and mountAtRoot puts
+  // them all at "/", so from the first root mount onwards a read of that path
+  // returns whichever faction mounted last. This mod is the only thing that
+  // mounts at the root - Community Mods mounts under /server_mods/<id>/ and
+  // /client_mods/<id>/ - so a read taken before the first mountAtRoot of the
+  // process is the unshadowed base list, and it is worth keeping. There is no
+  // pa_ex1 path to read instead: pa_ex1 is mounted onto pa before mods are.
+  // See design.md.
+  var VANILLA_KEY = "gw_server_mods_vanilla_units";
+  var vanillaUnits;
+
+  function loadVanillaUnits() {
+    if (vanillaUnits) {
+      return vanillaUnits;
+    }
+
+    try {
+      var stored = JSON.parse(sessionStorage.getItem(VANILLA_KEY) || "null");
+      if (_.isArray(stored)) {
+        vanillaUnits = stored;
+      }
+    } catch (e) {
+      vanillaUnits = undefined;
+    }
+
+    return vanillaUnits;
+  }
+
+  // Called before the first mount of a run, so the read still sees the base
+  // game. Resolves either way: a base list that cannot be read costs four units
+  // in one faction combination, and must never cost a battle.
+  function captureVanillaUnits() {
+    if (loadVanillaUnits()) {
+      return $.Deferred().resolve(vanillaUnits).promise();
+    }
+
+    return readUnitList("coui://pa/units/unit_list.json").then(
+      function (units) {
+        if (!_.isArray(units)) {
+          ns.log("base unit list not read");
+          return undefined;
+        }
+
+        vanillaUnits = units;
+
+        try {
+          sessionStorage.setItem(VANILLA_KEY, JSON.stringify(units));
+        } catch (e) {
+          // In-memory only for the rest of this scene.
+          ns.log("base unit list not persisted");
+        }
+
+        return units;
+      }
+    );
+  }
+
   function reportUnmerged(detail, reason) {
     detail.reason = reason;
 
@@ -121,11 +180,12 @@
       return deferred.promise();
     }
 
-    // The root list is read through coui://, never spec://: the engine caches a
-    // spec:// path after its first read, and the referee reads this one through
+    // Every read is through coui://, never spec://: the engine caches a spec://
+    // path after its first read, and the referee reads the merged list through
     // spec://, so a spec:// read here would pin the unmerged list for the whole
-    // process. See design.md.
-    var reads = [readUnitList("coui://pa/units/unit_list.json")].concat(
+    // process. The base list comes from captureVanillaUnits rather than a read
+    // taken now, which the root mounts would shadow. See design.md.
+    var reads = [$.Deferred().resolve(loadVanillaUnits()).promise()].concat(
       _.map(
         _.filter(mods, function (mod) {
           return !mod.fileSystem;
@@ -343,11 +403,14 @@
         return;
       }
 
-      if (rootOnly) {
-        mountRootOnly(mods, withContent, deferred);
-      } else {
-        mountForBattle(mods, withContent, deferred);
-      }
+      // Before the first mountAtRoot, while the base list is still readable.
+      captureVanillaUnits().always(function () {
+        if (rootOnly) {
+          mountRootOnly(mods, withContent, deferred);
+        } else {
+          mountForBattle(mods, withContent, deferred);
+        }
+      });
     });
 
     return deferred.promise();

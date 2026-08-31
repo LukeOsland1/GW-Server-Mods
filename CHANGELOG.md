@@ -8,6 +8,8 @@
   their commanders before a war exists
 - Entering a Galactic War no longer stalls on a black screen for several seconds before
   the galaxy map appears
+- Fixed base-game units going missing from a battle when the only active faction mod
+  omits them from its unit list
 
 ## v1.0.0 - 2026-08-28
 
