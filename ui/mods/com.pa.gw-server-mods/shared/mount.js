@@ -14,6 +14,7 @@
   };
 
   var running = null;
+  var runningWithContent = false;
 
   function zipMountAvailable() {
     return !!(api.file && api.file.zip && _.isFunction(api.file.zip.mount));
@@ -353,20 +354,45 @@
   }
 
   // A single unmount reaches here through two wrappers, and a full cycle costs
-  // seconds, so concurrent callers share one run.
+  // seconds, so concurrent callers share one run. A caller that needs the
+  // content remount is the exception: a run that skipped it leaves the models
+  // unregistered, so sharing one would start the battle with every unit
+  // invisible. That caller waits for the run in flight and then gets its own -
+  // queued rather than started, since two runs must not overlap their mounts.
   function run(options) {
-    if (running) {
+    var withContent = !options || options.remountContent !== false;
+
+    if (running && (runningWithContent || !withContent)) {
       return running;
+    }
+
+    var previous = running;
+    var current;
+
+    if (previous) {
+      var queued = $.Deferred();
+
+      previous.always(function () {
+        runOnce(options).always(function (ok) {
+          queued.resolve(ok);
+        });
+      });
+
+      current = queued.promise();
+    } else {
+      current = runOnce(options);
     }
 
     // A run with nothing to mount settles at once, so the clear can fire
     // before this function returns; neither the assignment nor the return
-    // may come after it.
-    var current = runOnce(options);
-
+    // may come after it. The queued run supersedes the one it waits on, so
+    // only the run still current may clear.
     running = current;
+    runningWithContent = withContent;
     current.always(function () {
-      running = null;
+      if (running === current) {
+        running = null;
+      }
     });
 
     return current;

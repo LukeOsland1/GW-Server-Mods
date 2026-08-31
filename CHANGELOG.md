@@ -6,6 +6,8 @@
   hotkey grids, player list theming and in-game mechanics such as Bugs' research
 - Server mods are mounted in the war setup screen too, so a Galactic War mod can offer
   their commanders before a war exists
+- Entering a Galactic War no longer stalls on a black screen for several seconds before
+  the galaxy map appears
 
 ## v1.0.0 - 2026-08-28
 

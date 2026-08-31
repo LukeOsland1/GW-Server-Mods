@@ -293,6 +293,97 @@ describe("mount.run", () => {
     assert.equal(fixture.ns.mount.sequence(), 2);
   });
 
+  // gw_play mounts without the remount, so the Fight click arriving while that
+  // run is still open must not inherit a run that left the models unregistered.
+  it("queues a content caller behind a run that skipped the remount", () => {
+    const pending = Deferred();
+    const fixture = scene({
+      cmmOptions: {
+        serverMods: [mod()],
+        mountServerMods: () => pending.promise(),
+      },
+    });
+
+    const first = fixture.ns.mount.run({ remountContent: false });
+    const second = fixture.ns.mount.run();
+
+    assert.notEqual(first, second);
+    assert.equal(fixture.api.calls.remount.length, 0);
+    assert.equal(fixture.ns.mount.sequence(), 0);
+
+    pending.resolve();
+
+    assert.equal(fixture.ns.mount.sequence(), 2);
+    assert.equal(fixture.api.calls.remount.length, 1);
+    assert.equal(run(fixture, { remountContent: false }), true);
+  });
+
+  it("shares a run that remounts with a caller that does not need it", () => {
+    const pending = Deferred();
+    const fixture = scene({
+      cmmOptions: {
+        serverMods: [mod()],
+        mountServerMods: () => pending.promise(),
+      },
+    });
+
+    const first = fixture.ns.mount.run();
+
+    assert.equal(fixture.ns.mount.run({ remountContent: false }), first);
+    assert.equal(fixture.ns.mount.run(), first);
+
+    pending.resolve();
+
+    assert.equal(fixture.ns.mount.sequence(), 1);
+    assert.equal(fixture.api.calls.remount.length, 1);
+  });
+
+  it("shares one contentless run between contentless callers", () => {
+    const pending = Deferred();
+    const fixture = scene({
+      cmmOptions: {
+        serverMods: [mod()],
+        mountServerMods: () => pending.promise(),
+      },
+    });
+
+    const first = fixture.ns.mount.run({ remountContent: false });
+
+    assert.equal(fixture.ns.mount.run({ remountContent: false }), first);
+
+    pending.resolve();
+
+    assert.equal(fixture.ns.mount.sequence(), 1);
+    assert.equal(fixture.api.calls.remount.length, 0);
+  });
+
+  // The queued run supersedes the one it waits on, so the run it replaced must
+  // not clear it on the way out.
+  it("holds the queued run open until it settles", () => {
+    const first = Deferred();
+    const second = Deferred();
+    const responses = [first, second];
+    const fixture = scene({
+      cmmOptions: {
+        serverMods: [mod()],
+        mountServerMods: () => responses.shift().promise(),
+      },
+    });
+
+    fixture.ns.mount.run({ remountContent: false });
+    const queued = fixture.ns.mount.run();
+
+    first.resolve();
+
+    assert.equal(fixture.ns.mount.run(), queued);
+    assert.equal(fixture.ns.mount.sequence(), 1);
+
+    second.resolve();
+
+    assert.equal(fixture.ns.mount.sequence(), 2);
+    assert.notEqual(fixture.ns.mount.run(), queued);
+  });
+
   it("persists the classification for the gate", () => {
     const storage = fakeSessionStorage();
     const fixture = scene({

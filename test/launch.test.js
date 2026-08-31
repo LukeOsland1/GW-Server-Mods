@@ -1,13 +1,15 @@
 "use strict";
 
-// gw_play/launch.js: mount as the scene loads and again on the way into a
-// battle, through model.fight.
+// gw_play/launch.js: mount as the scene loads - without the content remount,
+// which the galaxy map does not need - and again on the way into a battle,
+// through model.fight, where it does.
 
 const { describe, it } = require("node:test");
 const assert = require("node:assert/strict");
 
 const { sharedScene } = require("../scripts/lib/shared-scene.js");
 const { Deferred, resolved } = require("../scripts/lib/fake-jquery.js");
+const { mod } = require("../scripts/lib/fake-cmm.js");
 const { loadFile } = require("../scripts/lib/scene-loader.js");
 
 function scene(options) {
@@ -51,6 +53,25 @@ describe("launch installation", () => {
     assert.deepEqual(fixture.codes(), []);
   });
 
+  // The remount blanks the scene for seconds, and nothing on the galaxy map
+  // goes through the renderer's content catalogue.
+  it("mounts without remounting the content", () => {
+    const fixture = scene({ cmmOptions: { serverMods: [mod()] } });
+
+    assert.equal(fixture.api.calls.zipMount.length, 1);
+    assert.equal(fixture.api.calls.remount.length, 0);
+  });
+
+  // The hooks keep the default, so a mount triggered by an unmount mid-launch
+  // still restores the catalogue.
+  it("installs the hooks without inheriting the scene's options", () => {
+    const fixture = scene({ cmmOptions: { serverMods: [mod()] } });
+
+    fixture.api.file.unmountAllMemoryFiles();
+
+    assert.equal(fixture.api.calls.remount.length, 1);
+  });
+
   it("raises launch_unavailable without model.fight", () => {
     const fixture = scene({ model: {} });
     assert.deepEqual(fixture.alarm("launch_unavailable")[0].detail, {
@@ -85,8 +106,8 @@ describe("the patched fight", () => {
   it("mounts, then fights with the same this and arguments", () => {
     const fixture = scene();
     const runs = [];
-    fixture.ns.mount.run = () => {
-      runs.push(fixture.fights.length);
+    fixture.ns.mount.run = (options) => {
+      runs.push({ options: options, fought: fixture.fights.length });
       return resolved(true);
     };
     const self = {};
@@ -96,7 +117,8 @@ describe("the patched fight", () => {
       outcome = value;
     });
 
-    assert.deepEqual(runs, [0]);
+    // No options: the battle needs the content remount the scene skipped.
+    assert.deepEqual(runs, [{ options: undefined, fought: 0 }]);
     assert.deepEqual(fixture.fights, [{ self, args: [1, 2] }]);
     assert.equal(outcome, "fought");
   });

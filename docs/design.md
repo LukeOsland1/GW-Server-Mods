@@ -168,6 +168,23 @@ It must **not** run during a battle: it blanks the scene, and the models are alr
 loaded by then, so `live_game` holds the mounts with `remountContent: false`. Zip mounts
 themselves survive a remount - that was checked directly, before and after.
 
+`gw_play` passes the same option, for the neighbouring reason: the galaxy map has no
+renderer content to register. Its commander portraits, tech card art and unit icons are
+read through `coui:`, which the root mounts serve on their own, so a remount there buys
+nothing and costs the several seconds of black screen between leaving `gw_start` and the
+map appearing. The rebuild happens on the way into the battle instead, where it is
+needed and where the launch panel accounts for the wait: the patched `model.fight` and
+`connect_to_game` both run with the default options.
+
+That makes the coalescing in `run()` load-bearing rather than a convenience. Concurrent
+callers still share one run, except a caller that needs the remount while one that
+skipped it is in flight - sharing that would hand the battle a catalogue that was never
+rebuilt. It waits for the run in flight and then gets its own, queued rather than started
+so two runs never overlap their mounts. `gw_play/launch.js` therefore installs the hooks
+with **no** options: an unmount mid-launch must still restore the catalogue, unlike
+`live_game/remount.js`, which installs with `remountContent: false` because there the
+scene is already running.
+
 ## Launch progress
 
 Galactic War Overhaul shows a loading panel from the Fight click to the hand-off to
@@ -178,7 +195,9 @@ remount. GWO owns the screen, so nothing here shows or hides it.
 Two facts make that safe without a load-order contract in the code:
 
 - `stage()` is a no-op outside a launch, so the scene-entry mount in `gw_play/launch.js`
-  and the mounts in `connect_to_game` and `live_game` report nothing.
+  and the mounts in `connect_to_game` and `live_game` report nothing. The scene-entry
+  mount no longer performs the content remount, so it has nothing the panel would want
+  to label anyway.
 - The object is resolved at call time. GWO carries `priority: 200` and this mod the
   default 100, so GWO loads later and the object does not exist when `mount.js` runs.
 
