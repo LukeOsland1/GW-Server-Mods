@@ -413,7 +413,11 @@ mods today, and this mod must not quietly soften it for server mods.
 `GwServerMods.hostRequiresMod(identifier)` answers whether the host's published required
 list names the identifier — client or server mod alike — so a feature can offer only what
 the host supports — a viewer running Legion against a host that is not should not be
-offered Legion.
+offered Legion. `GwServerMods.hostServerMods()` is the list form of the same capture:
+`{ identifier, displayName, version }` per mod, an empty array when the host published
+nothing. Both are public contract — Galactic War Overhaul's co-op race picker filters its
+offer through `hostServerMods()` — so their names, shapes and the capture they read must
+not change without a coordinated GWO release.
 
 ## Identifier case
 
