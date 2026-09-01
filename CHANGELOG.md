@@ -10,6 +10,9 @@
   the galaxy map appears
 - Fixed base-game units going missing from a battle when the only active faction mod
   omits them from its unit list
+- Fixed a Galactic War mod's race player being dealt every tech card and starting
+  battles with vanilla units and no commander model: preparing the race for the galaxy
+  map could put one faction's unit list back over the merged one
 
 ## v1.0.0 - 2026-08-28
 

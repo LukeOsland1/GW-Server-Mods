@@ -116,6 +116,22 @@ at `/pa/units/unit_list.json` with `api.file.mountMemoryFiles`. It is a memory f
 hooks, so it comes back with the zips. The referee then overwrites the same path with the
 cooked superset it derived from the merged list, in the order the hook wrapper guarantees.
 
+A root-only run re-shadows that memory file: its zip mounts land at `/` after the merged
+list was mounted, and the VFS serves whichever mount happened last — measured in `gw_play`
+as `coui://pa/units/unit_list.json` dropping from 575 units to 332 after
+`mount.run({ rootOnly: true })` and returning to 575 after a full run. GWO issues exactly
+that sequence when it primes race cells, so `mountRootOnly` re-mounts the payload of the
+last merge, cached in module scope, after its root mounts settle. It cannot call
+`mergeUnitList` instead: the merge reads each mod's list through `spec://server_mods/<id>/…`,
+those mounts exist only once `CommunityModsManager.mountServerMods` has run on the battle
+path, and `spec://` pins a path's first read for the process, so a merge attempted in
+`gw_start` would pin empty reads and break every later battle's merge. The cache is
+scene-scoped on purpose: the harmful sequence — a battle mount followed by a root-only
+one — happens inside `gw_play`, `gw_start` has no merge to restore, and a merge carried
+across scenes could name the wrong mod set. The restore must also never run after the
+referee's cooked overwrite, which holds because no scene issues a root-only run once a
+battle is under way — keep it that way.
+
 #### Where the base list comes from
 
 The base game's own list cannot be read at merge time. `mountAtRoot` puts every active
@@ -189,7 +205,8 @@ for: the root mounts, nothing else - the scene reads specs and portraits through
 which the zip mounts alone serve, and the content remount freezes the UI for seconds.
 There is no `/server_mods/` mount because there is no manager to make it and no server to
 read it, no unit-list merge because no referee runs here, and no probe of `mods.json`
-because it does not exist. Its purpose is to let a Galactic War mod show a server mod's
+because it does not exist. There is also nothing to restore on the way out: the merge
+cache is scene-scoped and `gw_start` never merged. Its purpose is to let a Galactic War mod show a server mod's
 commanders — specs and portraits — before the war is created. A battle mount still refuses
 to run without Community Mods, since the `rootOnly` path is the only one the fallback
 listing is fit for: re-mounting the merged unit list under a running battle would replace
@@ -274,7 +291,10 @@ That makes the coalescing in `run()` load-bearing rather than a convenience. Con
 callers still share one run, except a caller that needs the remount while one that
 skipped it is in flight - sharing that would hand the battle a catalogue that was never
 rebuilt. It waits for the run in flight and then gets its own, queued rather than started
-so two runs never overlap their mounts. `gw_play/launch.js` therefore installs the hooks
+so two runs never overlap their mounts. A root-only run in flight is the other exception:
+it merged no unit list and made no `/server_mods/<id>/` mounts, so a battle caller queues
+behind it the same way, while a root-only caller may still share a battle run, which does
+everything it needs and more. `gw_play/launch.js` therefore installs the hooks
 with **no** options: an unmount mid-launch must still restore the catalogue, unlike
 `live_game/remount.js`, which installs with `remountContent: false` because there the
 scene is already running.
