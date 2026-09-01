@@ -15,6 +15,7 @@
 
   var running = null;
   var runningWithContent = false;
+  var runningRootOnly = false;
 
   // A read that failed is a read that found nothing; nothing here treats the
   // two differently, and none of these may reject.
@@ -159,6 +160,16 @@
     }
   }
 
+  // The last merge this scene mounted, kept so a root-only run can put it
+  // back: its zip mounts land at "/" after the memory file and re-shadow it.
+  // The merge itself cannot run there - its spec:/server_mods/<id>/ reads
+  // exist only once CommunityModsManager.mountServerMods has run, and spec:
+  // pins a path's first read for the whole process. Scene-scoped on purpose:
+  // the harmful sequence - a battle mount then a root-only one - happens
+  // inside gw_play, gw_start has no merge to restore, and a merge carried
+  // across scenes could name the wrong mod set. See design.md.
+  var mergedUnitFile;
+
   // Every faction ships its own unit_list.json and the root mounts shadow each
   // other, so the referee would only see the last one. See design.md.
   function mergeUnitList(mods) {
@@ -199,6 +210,7 @@
 
       var merged = _.union.apply(_, [lists[0] || []].concat(modLists));
       var detail = { units: merged.length, lists: modLists.length };
+      var payload = JSON.stringify({ units: merged });
 
       if (!api.file || !_.isFunction(api.file.mountMemoryFiles)) {
         reportUnmerged(detail, "mountMemoryFiles unavailable");
@@ -206,11 +218,10 @@
       }
 
       return Promise.resolve(
-        api.file.mountMemoryFiles({
-          "/pa/units/unit_list.json": JSON.stringify({ units: merged }),
-        })
+        api.file.mountMemoryFiles({ "/pa/units/unit_list.json": payload })
       ).then(
         function () {
+          mergedUnitFile = { payload: payload, detail: detail };
           ns.log("merged unit list", detail);
         },
         function (error) {
@@ -218,6 +229,34 @@
         }
       );
     });
+  }
+
+  // Called by mountRootOnly after its zip mounts, which re-shadow the memory
+  // file. No cached merge means nothing to restore - gw_start, or a scene
+  // whose merge never mounted.
+  function restoreMergedUnitList() {
+    if (
+      !mergedUnitFile ||
+      !api.file ||
+      !_.isFunction(api.file.mountMemoryFiles)
+    ) {
+      return Promise.resolve();
+    }
+
+    var detail = _.clone(mergedUnitFile.detail);
+
+    return Promise.resolve(
+      api.file.mountMemoryFiles({
+        "/pa/units/unit_list.json": mergedUnitFile.payload,
+      })
+    ).then(
+      function () {
+        ns.log("restored merged unit list", detail);
+      },
+      function (error) {
+        reportUnmerged(detail, String(error));
+      }
+    );
   }
 
   // GWO's battle-preparation screen, when present. Resolved at call time:
@@ -321,7 +360,10 @@
       .then(function (results) {
         ok = !_.contains(results, false);
 
-        return ns.settled([withContent ? remountContent() : null]);
+        return ns.settled([
+          withContent ? remountContent() : null,
+          restoreMergedUnitList(),
+        ]);
       })
       .then(function () {
         settle(ok, mods);
@@ -407,10 +449,18 @@
   // unregistered, so sharing one would start the battle with every unit
   // invisible. That caller waits for the run in flight and then gets its own -
   // queued rather than started, since two runs must not overlap their mounts.
+  // A root-only run in flight is the other exception for a battle caller: it
+  // merged nothing and made no /server_mods/<id>/ mounts, so only another
+  // root-only caller may share it.
   function run(options) {
     var withContent = !options || options.remountContent !== false;
+    var rootOnly = !!(options && options.rootOnly);
 
-    if (running && (runningWithContent || !withContent)) {
+    if (
+      running &&
+      (runningWithContent || !withContent) &&
+      (!runningRootOnly || rootOnly)
+    ) {
       return running;
     }
 
@@ -442,6 +492,7 @@
 
     running = current;
     runningWithContent = withContent;
+    runningRootOnly = rootOnly;
     current.then(clear, clear);
 
     return current;

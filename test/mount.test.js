@@ -746,6 +746,77 @@ describe("the merged unit list", () => {
       reason: "refused",
     });
   });
+
+  // The root-only zip mounts land at "/" after the memory file and re-shadow
+  // it, so the run must put the merged list back on top before it settles.
+  it("goes back on top after a root-only run re-shadows it", async () => {
+    const gate = Deferred();
+    let gated = false;
+    const fixture = scene({
+      apiOptions: {
+        zipMount: () => (gated ? gate.promise() : resolved(true)),
+      },
+    });
+
+    assert.equal(await run(fixture), true);
+    assert.equal(fixture.api.calls.mountMemoryFiles.length, 1);
+    gated = true;
+
+    const rootOnly = run(fixture, { rootOnly: true, remountContent: false });
+    await flush();
+    assert.equal(fixture.api.calls.mountMemoryFiles.length, 1);
+
+    gate.resolve(true);
+    assert.equal(await rootOnly, true);
+    assert.equal(fixture.api.calls.mountMemoryFiles.length, 2);
+    assert.deepEqual(
+      fixture.api.calls.mountMemoryFiles[1],
+      fixture.api.calls.mountMemoryFiles[0]
+    );
+    // Restored from the cache, not re-merged.
+    assert.equal(
+      fixture.$.ajaxCalls.filter((call) => call.url === MOD_LIST).length,
+      1
+    );
+    assert.equal(
+      fixture.console.lines.log.includes(
+        '[GW-SM] restored merged unit list {"units":2,"lists":1}'
+      ),
+      true
+    );
+  });
+
+  it("is not written by a root-only run before any merge", async () => {
+    const fixture = scene();
+
+    assert.equal(
+      await run(fixture, { rootOnly: true, remountContent: false }),
+      true
+    );
+    assert.equal(fixture.api.calls.mountMemoryFiles.length, 0);
+  });
+
+  it("reports a restore the engine refused", async () => {
+    let mounts = 0;
+    const fixture = scene({
+      apiOptions: {
+        mountMemoryFiles: () => (++mounts === 1 ? undefined : rejected("no")),
+      },
+    });
+
+    assert.equal(await run(fixture), true);
+    assert.equal(
+      await run(fixture, { rootOnly: true, remountContent: false }),
+      true
+    );
+    assert.deepEqual(fixture.codes(), []);
+    assert.equal(
+      fixture.console.lines.log.includes(
+        '[GW-SM] unit list not merged {"units":2,"lists":1,"reason":"no"}'
+      ),
+      true
+    );
+  });
 });
 
 describe("the launch progress report", () => {
@@ -890,5 +961,51 @@ describe("mount.run rootOnly", () => {
       JSON.parse(fixture.ctx.localStorage.store.gw_server_mods_scenes),
       { live_game: ["coui://ui/mods/x.js"] }
     );
+  });
+
+  // A root-only run merged nothing and made no /server_mods/<id>/ mounts, so
+  // a battle caller handed it would report success having done neither.
+  it("queues a battle caller behind a root-only run", async () => {
+    const gate = Deferred();
+    const fixture = scene({
+      apiOptions: { zipMount: () => gate.promise() },
+    });
+
+    const first = run(fixture, { rootOnly: true, remountContent: false });
+    const second = run(fixture, { remountContent: false });
+
+    assert.notEqual(first, second);
+    await flush();
+    assert.equal(fixture.ns.mount.sequence(), 0);
+
+    gate.resolve(true);
+    assert.equal(await first, true);
+    assert.equal(await second, true);
+    assert.equal(fixture.ns.mount.sequence(), 2);
+    // Only the queued battle run merges; neither caller remounts content.
+    assert.equal(fixture.api.calls.mountMemoryFiles.length, 1);
+    assert.equal(fixture.api.calls.remount.length, 0);
+  });
+
+  it("lets a root-only caller share a battle run", async () => {
+    const pending = Deferred();
+    const fixture = scene({
+      cmmOptions: {
+        serverMods: [mod()],
+        mountServerMods: () => pending.promise(),
+      },
+    });
+
+    const first = run(fixture, { remountContent: false });
+
+    assert.equal(
+      run(fixture, { rootOnly: true, remountContent: false }),
+      first
+    );
+
+    pending.resolve();
+    await flush();
+
+    assert.equal(fixture.ns.mount.sequence(), 1);
   });
 });
