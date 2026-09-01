@@ -67,6 +67,22 @@ function stages(fixture) {
 }
 
 describe("mount.run", () => {
+  // A caller identifies a promise by a `promise` method, which neither an
+  // engine promise nor a native one has, so what leaves the mod must be
+  // jQuery. GWO waits on this one. See design.md.
+  it("hands back a promise a caller's $.when waits for", async () => {
+    const fixture = scene();
+    const waited = [];
+    const running = run(fixture);
+
+    assert.equal(typeof running.promise, "function");
+    fixture.$.when(running).always(() => waited.push("settled"));
+    assert.deepEqual(waited, []);
+
+    await running;
+    assert.deepEqual(waited, ["settled"]);
+  });
+
   it("resolves false without touching anything when Community Mods is absent", async () => {
     const fixture = scene({ cmm: null });
 
